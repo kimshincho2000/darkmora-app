@@ -24,7 +24,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
 
       - name: 📦 Install Dependencies
         run: |
@@ -37,13 +36,13 @@ jobs:
         run: |
           npx expo prebuild --platform android --clean
 
-      - name: 🔨 Build Release APK via Gradle
+      - name: 🔨 Build Android APK via Gradle
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew assembleDebug --no-daemon
 
-      - name: 📂 Rename & Locate APK
+      - name: 📂 Locate APK
         run: |
           mkdir -p build_output
           find android/app/build/outputs/apk -name "*.apk" -exec cp {} build_output/DarkMora.apk \;
@@ -57,17 +56,17 @@ jobs:
           path: build_output/DarkMora.apk
           retention-days: 14
 
-      - name: 🏷️ Create GitHub Release (Optional on tag/push)
-        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+      - name: 🏷️ Create GitHub Release
         uses: softprops/action-gh-release@v2
+        if: always()
         with:
           files: build_output/DarkMora.apk
           name: DarkMora v1.0.0
-          tag_name: v1.0.0-${{ github.run_number }}
+          tag_name: v1.0.0-build-${{ github.run_number }}
           body: |
-            ## DarkMora Rasmiy Mobil Ilovasi (Native Android APK)
-            - 100% Native ExoPlayer (qotmasdan video o'ynatish)
-            - Darkmora.uz bilan 1x1 to'liq integratsiya
-            - WebView ishlatilmagan (haqiqiy Android ilova)
+            ## DarkMora Rasmiy Mobil Ilovasi (100% Native Android APK)
+            - WebView ishlatilmagan (haqiqiy Android Native ilova)
+            - Native ExoPlayer (video streaming)
+            - Darkmora.uz sayti bilan 1x1 to'liq bir xil
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
