@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-apk:
-    name: Build Native Android APK
+    name: Build Optimized Release Android APK
     runs-on: ubuntu-latest
 
     steps:
@@ -33,18 +33,23 @@ jobs:
         run: |
           npx expo prebuild --platform android --clean
 
-      - name: 🔨 Build Android APK via Gradle
+      - name: ⚙️ Configure Release Signing
+        run: |
+          # Telefonga bemalol o'rnatilishi uchun release buildga ham universal kalit ulaymiz
+          sed -i 's/signingConfig signingConfigs.release/signingConfig signingConfigs.debug/g' android/app/build.gradle
+
+      - name: 🔨 Build Optimized Release APK via Gradle
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleRelease --no-daemon
 
-      - name: 📂 Locate APK
+      - name: 📂 Locate Release APK
         run: |
           mkdir -p build_output
-          find android/app/build/outputs/apk -name "*.apk" -exec cp {} build_output/DarkMora.apk \;
-          echo "APK tayyor:"
-          ls -la build_output/
+          find android/app/build/outputs/apk/release -name "*.apk" -exec cp {} build_output/DarkMora.apk \;
+          echo "Optimallashtirilgan Release APK hajmi:"
+          ls -lh build_output/DarkMora.apk
 
       - name: 📤 Upload APK Artifact
         uses: actions/upload-artifact@v4
@@ -52,18 +57,3 @@ jobs:
           name: DarkMora-Android-APK
           path: build_output/DarkMora.apk
           retention-days: 14
-
-      - name: 🏷️ Create GitHub Release
-        if: success()
-        uses: softprops/action-gh-release@v2
-        with:
-          files: build_output/DarkMora.apk
-          name: DarkMora v1.0.0
-          tag_name: v1.0.0-build-${{ github.run_number }}
-          body: |
-            ## DarkMora Rasmiy Mobil Ilovasi (100% Native Android APK)
-            - WebView ishlatilmagan (haqiqiy Android Native ilova)
-            - Native ExoPlayer (video streaming)
-            - Darkmora.uz sayti bilan 1x1 to'liq bir xil
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
