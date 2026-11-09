@@ -180,6 +180,10 @@ export const api = {
     return res?.data?.user || null;
   },
 
+  getAppConfig: async () => {
+    return await apiRequest('/api?action=get_config');
+  },
+
   logout: async () => {
     await AsyncStorage.removeItem('darkmora_token');
   }

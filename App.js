@@ -6,6 +6,7 @@ import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { AuthProvider } from './src/context/AuthContext';
 import { BookmarkProvider } from './src/context/BookmarkContext';
 import RootNavigator from './src/navigation/RootNavigator';
+import AppUpdateModal from './src/components/AppUpdateModal';
 import { colors } from './src/theme/colors';
 
 const navTheme = {
@@ -28,6 +29,7 @@ export default function App() {
           <NavigationContainer theme={navTheme}>
             <StatusBar style="light" backgroundColor={colors.bg} />
             <RootNavigator />
+            <AppUpdateModal />
           </NavigationContainer>
         </BookmarkProvider>
       </AuthProvider>

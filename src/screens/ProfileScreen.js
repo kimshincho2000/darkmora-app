@@ -11,6 +11,7 @@ import {
   Modal,
   TextInput,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import {
   User,
@@ -27,11 +28,13 @@ import {
   Lock,
   Image as ImageIcon,
   UploadCloud,
+  RefreshCw,
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { colors } from '../theme/colors';
 import { useAuth } from '../context/AuthContext';
-import { toAbsoluteUrl } from '../api/client';
+import { toAbsoluteUrl, api } from '../api/client';
+import { CURRENT_APP_VERSION, isNewerVersion } from '../components/AppUpdateModal';
 
 const AVATAR_PRESETS = [
   { name: 'Luffy', url: 'https://darkmora.uz/uploads/avatars/presets/luffy.jpg' },
@@ -141,6 +144,36 @@ export default function ProfileScreen({ navigation }) {
     Linking.openURL('https://darkmora.uz').catch(() => {});
   };
 
+  const handleCheckUpdate = async () => {
+    try {
+      const res = await api.getAppConfig();
+      if (res && res.ok && res.config) {
+        const latest = res.config.latest_version;
+        if (latest && isNewerVersion(latest, CURRENT_APP_VERSION)) {
+          Alert.alert(
+            '🚀 Yangi yangilanish!',
+            `DarkMora ilovasining yangi v${latest} versiyasi chiqdi!\n\n• Video fonli yangi login (5-uslub)\n• Galereyadan rasm yuklash\n• Navigatsiya va xatoliklar tuzatildi\n\nHozir yangilaysizmi?`,
+            [
+              { text: 'Keyinroq', style: 'cancel' },
+              {
+                text: 'Yuklab olish (APK)',
+                onPress: () => {
+                  Linking.openURL(res.config.update_url || 'https://darkmora.uz/uploads/DarkMora.apk').catch(() => {});
+                },
+              },
+            ]
+          );
+        } else {
+          Alert.alert('Yangilanish', `Sizda eng so'nggi versiya o'rnatilgan (v${CURRENT_APP_VERSION})`);
+        }
+      } else {
+        Alert.alert('Yangilanish', `Sizda eng so'nggi versiya o'rnatilgan (v${CURRENT_APP_VERSION})`);
+      }
+    } catch (e) {
+      Alert.alert('Xatolik', 'Serverdan yangilanishni tekshirib bo\'lmadi');
+    }
+  };
+
   const userPhotoUri = user?.photo_url ? toAbsoluteUrl(user.photo_url) : null;
   const userInitial = user?.display_name
     ? user.display_name.charAt(0).toUpperCase()
@@ -233,15 +266,20 @@ export default function ProfileScreen({ navigation }) {
         <View style={styles.menuSection}>
           <Text style={styles.sectionTitle}>Ilova haqida</Text>
 
-          <View style={styles.menuItem}>
-            <View style={[styles.menuIconBg, { backgroundColor: 'rgba(255, 255, 255, 0.08)' }]}>
-              <HelpCircle size={18} color={colors.textMuted} />
+          <TouchableOpacity
+            style={styles.menuItem}
+            activeOpacity={0.7}
+            onPress={handleCheckUpdate}
+          >
+            <View style={[styles.menuIconBg, { backgroundColor: 'rgba(56, 189, 248, 0.15)' }]}>
+              <RefreshCw size={18} color={colors.primaryGlow} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.menuItemTitle}>Versiya</Text>
-              <Text style={styles.menuItemSub}>1.0.0 (Native Release)</Text>
+              <Text style={styles.menuItemTitle}>Yangilanishlarni tekshirish</Text>
+              <Text style={styles.menuItemSub}>Versiya: v{CURRENT_APP_VERSION} (Tekshirish uchun bosing)</Text>
             </View>
-          </View>
+            <ChevronRight size={18} color={colors.textDim} />
+          </TouchableOpacity>
 
           <View style={styles.menuItem}>
             <View style={[styles.menuIconBg, { backgroundColor: 'rgba(255, 255, 255, 0.08)' }]}>
