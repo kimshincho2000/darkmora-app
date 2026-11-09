@@ -65,6 +65,16 @@ export default function AppUpdateModal() {
           return;
         }
 
+        if (cfg.eligible_for_update === false) {
+          if (isManual) {
+            Alert.alert(
+              'Eng so\'nggi versiya',
+              `Sizda DarkMora ilovasining eng so'nggi v${CURRENT_APP_VERSION} versiyasi o'rnatilgan.`
+            );
+          }
+          return;
+        }
+
         const latest = cfg.latest_version;
         if (latest && isNewerVersion(latest, CURRENT_APP_VERSION)) {
           setUpdateInfo({

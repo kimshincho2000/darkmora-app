@@ -859,9 +859,58 @@ export default function AdminScreen({ navigation }) {
           </View>
 
           <View style={styles.settingsSection}>
-            <Text style={styles.settingsSectionTitle}>Ilova Versiyasi</Text>
+            <Text style={styles.settingsSectionTitle}>Ilova Yangilanishi va Auditoriya</Text>
+            <Text style={styles.sectionSubtitle}>
+              Yangilanish xabarini kimlarga yuborishni tanlang:
+            </Text>
 
-            <View style={styles.inputGroup}>
+            {/* Target Selector */}
+            <View style={styles.targetOptionGroup}>
+              {[
+                { key: 'all', title: '🌐 Hammaga', desc: 'Barcha foydalanuvchilar yangilanish oladi' },
+                { key: 'admins_only', title: '👑 Faqat Adminlarga', desc: 'Faqat admin hisoblariga yangilanish ko\'rsatiladi (Beta)' },
+                { key: 'specific_user', title: '👤 Faqat bitta foydalanuvchiga', desc: 'Faqat ko\'rsatilgan user yangilanish oladi' },
+              ].map(opt => {
+                const isSelected = (siteConfig?.update_target || 'all') === opt.key;
+                return (
+                  <TouchableOpacity
+                    key={opt.key}
+                    style={[styles.targetOptionCard, isSelected && styles.targetOptionCardActive]}
+                    onPress={() => setSiteConfig(prev => ({ ...prev, update_target: opt.key }))}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.targetOptionRadio}>
+                      {isSelected && <View style={styles.targetOptionRadioInner} />}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.targetOptionTitle, isSelected && styles.targetOptionTitleActive]}>
+                        {opt.title}
+                      </Text>
+                      <Text style={styles.targetOptionDesc}>{opt.desc}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Specific User Input */}
+            {(siteConfig?.update_target === 'specific_user') && (
+              <View style={[styles.inputGroup, { marginTop: 8 }]}>
+                <Text style={styles.inputLabel}>
+                  Foydalanuvchi Username yoki ID raqami *
+                </Text>
+                <TextInput
+                  style={[styles.textInput, { borderColor: '#38bdf8' }]}
+                  value={siteConfig?.update_target_user || ''}
+                  onChangeText={(text) => setSiteConfig(prev => ({ ...prev, update_target_user: text }))}
+                  placeholder="Masalan: fors yoki 123 yoki email"
+                  placeholderTextColor={colors.textDim}
+                  autoCapitalize="none"
+                />
+              </View>
+            )}
+
+            <View style={[styles.inputGroup, { marginTop: 12 }]}>
               <Text style={styles.inputLabel}>Eng so'nggi versiya (latest_version)</Text>
               <TextInput
                 style={styles.textInput}
@@ -873,13 +922,25 @@ export default function AdminScreen({ navigation }) {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Minimal versiya (min_version)</Text>
+              <Text style={styles.inputLabel}>Yangilanish APK havolasi (update_url)</Text>
               <TextInput
                 style={styles.textInput}
-                value={siteConfig?.min_version || ''}
-                onChangeText={(text) => setSiteConfig(prev => ({ ...prev, min_version: text }))}
-                placeholder="1.0.0"
+                value={siteConfig?.update_url || ''}
+                onChangeText={(text) => setSiteConfig(prev => ({ ...prev, update_url: text }))}
+                placeholder="https://darkmora.uz/uploads/DarkMora.apk?v=1.0.6"
                 placeholderTextColor={colors.textDim}
+              />
+            </View>
+
+            <View style={styles.settingRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.settingLabel}>Majburiy yangilanish (force_update)</Text>
+                <Text style={styles.settingSub}>Foydalanuvchi yangilamasdan ilovadan foydalana olmaydi</Text>
+              </View>
+              <Switch
+                value={Boolean(siteConfig?.force_update)}
+                onValueChange={(val) => setSiteConfig(prev => ({ ...prev, force_update: val }))}
+                trackColor={{ false: '#334155', true: '#ef4444' }}
               />
             </View>
 
@@ -1813,6 +1874,57 @@ const styles = StyleSheet.create({
   settingBtnText: {
     fontSize: 13,
     fontWeight: '600',
+  },
+  sectionSubtitle: {
+    fontSize: 12,
+    color: colors.textDim,
+    marginBottom: 12,
+  },
+  targetOptionGroup: {
+    gap: 8,
+    marginBottom: 12,
+  },
+  targetOptionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 12,
+    padding: 12,
+    gap: 12,
+  },
+  targetOptionCardActive: {
+    borderColor: colors.primaryGlow,
+    backgroundColor: 'rgba(29, 104, 246, 0.12)',
+  },
+  targetOptionRadio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: colors.textDim,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  targetOptionRadioInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.primaryGlow,
+  },
+  targetOptionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  targetOptionTitleActive: {
+    color: colors.primaryGlow,
+  },
+  targetOptionDesc: {
+    fontSize: 11,
+    color: colors.textDim,
+    marginTop: 2,
   },
   saveConfigBtn: {
     backgroundColor: colors.primaryGlow,
