@@ -276,6 +276,40 @@ export const api = {
     return await apiRequest('/api?action=admin_get_traffic_logs');
   },
 
+  // ================= CHAT & WATCH PARTY =================
+  chatGetMessages: async (roomId = 'global', limit = 50) => {
+    return await apiRequest(`/api?action=chat_get_messages&room_id=${encodeURIComponent(roomId)}&limit=${limit}`);
+  },
+
+  chatSendMessage: async (message, roomId = 'global') => {
+    return await apiRequest('/api?action=chat_send_message', {
+      method: 'POST',
+      body: JSON.stringify({ message, room_id: roomId }),
+    });
+  },
+
+  watchPartyList: async () => {
+    return await apiRequest('/api?action=watch_party_list');
+  },
+
+  watchPartyCreate: async (data) => {
+    return await apiRequest('/api?action=watch_party_create', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  watchPartyJoin: async (code) => {
+    return await apiRequest(`/api?action=watch_party_join&code=${encodeURIComponent(code)}`);
+  },
+
+  watchPartySync: async (code, playbackTime, isPlaying) => {
+    return await apiRequest('/api?action=watch_party_sync', {
+      method: 'POST',
+      body: JSON.stringify({ code, playback_time: playbackTime, is_playing: isPlaying }),
+    });
+  },
+
   logout: async () => {
     await AsyncStorage.removeItem('darkmora_token');
     await AsyncStorage.removeItem('darkmora_admin_token');

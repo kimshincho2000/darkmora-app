@@ -30,6 +30,9 @@ import {
   Image as ImageIcon,
   UploadCloud,
   RefreshCw,
+  MessageCircle,
+  Tv,
+  Sparkles,
 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { colors } from '../theme/colors';
@@ -228,6 +231,27 @@ export default function ProfileScreen({ navigation }) {
             <ChevronRight size={18} color="#fbbf24" />
           </TouchableOpacity>
         )}
+
+        {/* Chat & Watch Party Hub (BETA) */}
+        <TouchableOpacity
+          style={styles.chatBanner}
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate('Chat')}
+        >
+          <View style={styles.chatBannerIcon}>
+            <MessageCircle size={22} color="#38bdf8" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={styles.chatBannerTitle}>Chatlar & Watch Party</Text>
+              <View style={styles.chatBetaBadge}>
+                <Text style={styles.chatBetaBadgeText}>BETA</Text>
+              </View>
+            </View>
+            <Text style={styles.chatBannerSub}>Jonli suhbatlar va do'stlar bilan birga ko'rish</Text>
+          </View>
+          <ChevronRight size={18} color="#38bdf8" />
+        </TouchableOpacity>
 
         {/* Menu Items */}
         <View style={styles.menuSection}>
@@ -794,5 +818,47 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: 'rgba(255, 255, 255, 0.6)',
     marginTop: 2,
+  },
+  chatBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(56, 189, 248, 0.08)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(56, 189, 248, 0.35)',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 20,
+    gap: 12,
+  },
+  chatBannerIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  chatBannerTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#38bdf8',
+  },
+  chatBannerSub: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.6)',
+    marginTop: 2,
+  },
+  chatBetaBadge: {
+    backgroundColor: 'rgba(56, 189, 248, 0.2)',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#38bdf8',
+  },
+  chatBetaBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#38bdf8',
   },
 });

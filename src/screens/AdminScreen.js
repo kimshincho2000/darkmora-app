@@ -858,6 +858,35 @@ export default function AdminScreen({ navigation }) {
             </TouchableOpacity>
           </View>
 
+          {/* Chat & Watch Party Feature Toggles */}
+          <View style={styles.settingsSection}>
+            <Text style={styles.settingsSectionTitle}>💬 Hamjamiyat & Watch Party (Test Rejimi)</Text>
+
+            <View style={styles.settingRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.settingLabel}>Jonli Chat (Global Chat)</Text>
+                <Text style={styles.settingSub}>Telegram uslubidagi barcha a'zolar uchun jonli suhbat</Text>
+              </View>
+              <Switch
+                value={siteConfig?.chat_enabled !== false}
+                onValueChange={(val) => setSiteConfig(prev => ({ ...prev, chat_enabled: val }))}
+                trackColor={{ false: '#334155', true: '#38bdf8' }}
+              />
+            </View>
+
+            <View style={styles.settingRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.settingLabel}>Watch Party (Birga ko'rish)</Text>
+                <Text style={styles.settingSub}>Discord uslubidagi do'stlar bilan birga video tomosha qilish va ovozli suhbat</Text>
+              </View>
+              <Switch
+                value={siteConfig?.watch_party_enabled !== false}
+                onValueChange={(val) => setSiteConfig(prev => ({ ...prev, watch_party_enabled: val }))}
+                trackColor={{ false: '#334155', true: '#fbbf24' }}
+              />
+            </View>
+          </View>
+
           <View style={styles.settingsSection}>
             <Text style={styles.settingsSectionTitle}>Ilova Yangilanishi va Auditoriya</Text>
             <Text style={styles.sectionSubtitle}>
