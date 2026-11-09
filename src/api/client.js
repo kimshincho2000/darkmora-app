@@ -15,10 +15,12 @@ export const toAbsoluteUrl = (path) => {
 
 export const apiRequest = async (endpoint, options = {}) => {
   const token = await AsyncStorage.getItem('darkmora_token');
+  const adminToken = await AsyncStorage.getItem('darkmora_admin_token');
   const headers = {
     'Accept': 'application/json',
     'Content-Type': 'application/json',
     ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    ...(adminToken ? { 'X-Admin-Token': adminToken } : {}),
     ...(options.headers || {}),
   };
 
@@ -184,7 +186,98 @@ export const api = {
     return await apiRequest('/api?action=get_config');
   },
 
+  saveConfig: async (config) => {
+    return await apiRequest('/api?action=save_config', {
+      method: 'POST',
+      body: JSON.stringify({ config }),
+    });
+  },
+
+  // ================= ADMIN APIS =================
+  adminVerify2fa: async (tempToken, code) => {
+    const res = await apiRequest('/api?action=admin_verify_2fa', {
+      method: 'POST',
+      body: JSON.stringify({ temp_token: tempToken, code }),
+    });
+    if (res?.ok && res?.data?.token) {
+      await AsyncStorage.setItem('darkmora_token', res.data.token);
+    }
+    if (res?.ok && res?.data?.admin_token) {
+      await AsyncStorage.setItem('darkmora_admin_token', res.data.admin_token);
+    }
+    return res;
+  },
+
+  adminResend2fa: async (tempToken) => {
+    return await apiRequest('/api?action=admin_resend_2fa', {
+      method: 'POST',
+      body: JSON.stringify({ temp_token: tempToken }),
+    });
+  },
+
+  adminStats: async () => {
+    return await apiRequest('/api?action=admin_stats');
+  },
+
+  adminGetAnimes: async (page = 1, search = '') => {
+    return await apiRequest(`/api?action=admin_get_animes&page=${page}&search=${encodeURIComponent(search)}`);
+  },
+
+  adminGetAnimeDetail: async (id) => {
+    return await apiRequest(`/api?action=admin_get_anime_detail&id=${id}`);
+  },
+
+  adminSaveAnime: async (data) => {
+    return await apiRequest('/api?action=admin_save_anime', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  adminDeleteAnime: async (id) => {
+    return await apiRequest('/api?action=admin_delete_anime', {
+      method: 'POST',
+      body: JSON.stringify({ id }),
+    });
+  },
+
+  adminSaveEpisode: async (data) => {
+    return await apiRequest('/api?action=admin_save_episode', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  adminDeleteEpisode: async (dataId) => {
+    return await apiRequest('/api?action=admin_delete_episode', {
+      method: 'POST',
+      body: JSON.stringify({ data_id: dataId }),
+    });
+  },
+
+  adminGetRequests: async (status = 'all') => {
+    return await apiRequest(`/api?action=admin_get_requests&status=${status}`);
+  },
+
+  adminUpdateRequest: async (id, status, adminNote = '') => {
+    return await apiRequest('/api?action=admin_update_request', {
+      method: 'POST',
+      body: JSON.stringify({ id, status, admin_note: adminNote }),
+    });
+  },
+
+  adminClearCache: async () => {
+    return await apiRequest('/api?action=admin_clear_cache', {
+      method: 'POST',
+    });
+  },
+
+  adminGetTrafficLogs: async () => {
+    return await apiRequest('/api?action=admin_get_traffic_logs');
+  },
+
   logout: async () => {
     await AsyncStorage.removeItem('darkmora_token');
-  }
+    await AsyncStorage.removeItem('darkmora_admin_token');
+  },
 };

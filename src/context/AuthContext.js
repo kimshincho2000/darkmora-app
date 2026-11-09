@@ -3,8 +3,10 @@ import { api } from '../api/client';
 
 const AuthContext = createContext({
   user: null,
+  isAdmin: false,
   loading: true,
   login: async () => {},
+  verifyAdmin2FA: async () => {},
   register: async () => {},
   logout: async () => {},
   refreshUser: async () => {},
@@ -32,6 +34,15 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (username, password) => {
     const res = await api.login(username, password);
+    // If login is normal user success
+    if (res?.ok && !res?.data?.requires_2fa) {
+      await refreshUser();
+    }
+    return res;
+  };
+
+  const verifyAdmin2FA = async (tempToken, code) => {
+    const res = await api.adminVerify2fa(tempToken, code);
     if (res?.ok) {
       await refreshUser();
     }
@@ -59,8 +70,27 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  const isAdmin = Boolean(
+    user?.is_admin ||
+    user?.is_owner ||
+    user?.role === 'owner' ||
+    user?.username === 'fors'
+  );
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser, updateProfile }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        isAdmin,
+        loading,
+        login,
+        verifyAdmin2FA,
+        register,
+        logout,
+        refreshUser,
+        updateProfile,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

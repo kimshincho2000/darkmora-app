@@ -51,7 +51,7 @@ const AVATAR_PRESETS = [
 ];
 
 export default function ProfileScreen({ navigation }) {
-  const { user, logout, updateProfile } = useAuth();
+  const { user, isAdmin, logout, updateProfile } = useAuth();
 
   // Edit Modal State
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -210,6 +210,24 @@ export default function ProfileScreen({ navigation }) {
             </TouchableOpacity>
           )}
         </View>
+
+        {/* Admin Panel Entry */}
+        {isAdmin && (
+          <TouchableOpacity
+            style={styles.adminBanner}
+            activeOpacity={0.8}
+            onPress={() => navigation.navigate('Admin')}
+          >
+            <View style={styles.adminBannerIcon}>
+              <Shield size={22} color="#fbbf24" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.adminBannerTitle}>👑 Admin Panel</Text>
+              <Text style={styles.adminBannerSub}>Boshqaruv, animelar, qismlar va server</Text>
+            </View>
+            <ChevronRight size={18} color="#fbbf24" />
+          </TouchableOpacity>
+        )}
 
         {/* Menu Items */}
         <View style={styles.menuSection}>
@@ -747,5 +765,34 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '700',
+  },
+  adminBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(234, 179, 8, 0.08)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(234, 179, 8, 0.35)',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 20,
+    gap: 12,
+  },
+  adminBannerIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: 'rgba(234, 179, 8, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  adminBannerTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#fbbf24',
+  },
+  adminBannerSub: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.6)',
+    marginTop: 2,
   },
 });
