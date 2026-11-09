@@ -94,6 +94,87 @@ export const api = {
     return res;
   },
 
+  sendEmailCode: async (email) => {
+    return await apiRequest('/api?action=send_email_code', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  },
+
+  emailRegister: async ({ email, code, password, displayName, username }) => {
+    const res = await apiRequest('/api?action=email_register', {
+      method: 'POST',
+      body: JSON.stringify({
+        email,
+        code,
+        password,
+        display_name: displayName,
+        username: username || (email ? email.split('@')[0] : ''),
+      }),
+    });
+    if (res?.ok && res?.data?.token) {
+      await AsyncStorage.setItem('darkmora_token', res.data.token);
+    }
+    return res;
+  },
+
+  initPhoneRegister: async ({ phone, username, password }) => {
+    return await apiRequest('/api?action=init_phone_register', {
+      method: 'POST',
+      body: JSON.stringify({ phone, username, password }),
+    });
+  },
+
+  checkPhoneStatus: async (token) => {
+    return await apiRequest(`/api?action=check_phone_status&token=${encodeURIComponent(token)}`);
+  },
+
+  verifyPhoneRegister: async ({ token, code }) => {
+    const res = await apiRequest('/api?action=verify_phone_register', {
+      method: 'POST',
+      body: JSON.stringify({ token, code }),
+    });
+    if (res?.ok && res?.data?.token) {
+      await AsyncStorage.setItem('darkmora_token', res.data.token);
+    }
+    return res;
+  },
+
+  sendResetCode: async (identifier) => {
+    return await apiRequest('/api?action=send_reset_code', {
+      method: 'POST',
+      body: JSON.stringify({ identifier, email: identifier, phone: identifier }),
+    });
+  },
+
+  resetPassword: async ({ identifier, code, newPassword, token }) => {
+    return await apiRequest('/api?action=reset_password', {
+      method: 'POST',
+      body: JSON.stringify({
+        identifier,
+        email: identifier,
+        phone: identifier,
+        code,
+        password: newPassword,
+        new_password: newPassword,
+        token,
+      }),
+    });
+  },
+
+  updateProfile: async ({ displayName, photoUrl, photoBase64, password }) => {
+    const body = {};
+    if (displayName !== undefined) body.display_name = displayName;
+    if (photoUrl !== undefined) body.photo_url = photoUrl;
+    if (photoBase64 !== undefined) body.photo_base64 = photoBase64;
+    if (password) body.new_password = password;
+
+    return await apiRequest('/api?action=update_profile', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  },
+
   getCurrentUser: async () => {
     const res = await apiRequest('/api?action=user');
     return res?.data?.user || null;

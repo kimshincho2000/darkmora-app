@@ -1,10 +1,12 @@
 import React from 'react';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet, Platform, Image } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Home, Layers, Bookmark, User } from 'lucide-react-native';
 
 import { colors } from '../theme/colors';
+import { useAuth } from '../context/AuthContext';
+import { toAbsoluteUrl } from '../api/client';
 
 import HomeScreen from '../screens/HomeScreen';
 import CatalogScreen from '../screens/CatalogScreen';
@@ -15,11 +17,14 @@ import PlayerScreen from '../screens/PlayerScreen';
 import SearchScreen from '../screens/SearchScreen';
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
+import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
 function MainTabs() {
+  const { user } = useAuth();
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -60,7 +65,19 @@ function MainTabs() {
         component={ProfileScreen}
         options={{
           tabBarLabel: 'Profil',
-          tabBarIcon: ({ color, size }) => <User size={size - 2} color={color} />,
+          tabBarIcon: ({ color, size, focused }) => {
+            if (user && user.photo_url) {
+              return (
+                <View style={[styles.tabAvatarWrap, focused && styles.tabAvatarWrapActive]}>
+                  <Image
+                    source={{ uri: toAbsoluteUrl(user.photo_url) }}
+                    style={styles.tabAvatar}
+                  />
+                </View>
+              );
+            }
+            return <User size={size - 2} color={color} />;
+          },
         }}
       />
     </Tab.Navigator>
@@ -88,6 +105,7 @@ export default function RootNavigator() {
       <Stack.Screen name="Search" component={SearchScreen} />
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="Register" component={RegisterScreen} />
+      <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
     </Stack.Navigator>
   );
 }
@@ -110,5 +128,23 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     marginTop: 2,
+  },
+  tabAvatarWrap: {
+    width: 25,
+    height: 25,
+    borderRadius: 12.5,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tabAvatarWrapActive: {
+    borderColor: colors.primaryGlow,
+  },
+  tabAvatar: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 12.5,
   },
 });

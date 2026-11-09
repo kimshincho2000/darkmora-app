@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,10 @@ import {
   ScrollView,
   Linking,
   StatusBar,
+  Image,
+  Modal,
+  TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import {
   User,
@@ -17,12 +21,79 @@ import {
   HelpCircle,
   LogOut,
   ChevronRight,
+  Edit3,
+  X,
+  Check,
+  Lock,
+  Image as ImageIcon,
 } from 'lucide-react-native';
 import { colors } from '../theme/colors';
 import { useAuth } from '../context/AuthContext';
+import { toAbsoluteUrl } from '../api/client';
+
+const AVATAR_PRESETS = [
+  { name: 'Luffy', url: 'https://darkmora.uz/uploads/avatars/presets/luffy.jpg' },
+  { name: 'Zoro', url: 'https://darkmora.uz/uploads/avatars/presets/zoro.jpg' },
+  { name: 'Gojo', url: 'https://darkmora.uz/uploads/avatars/presets/gojo.jpg' },
+  { name: 'Naruto', url: 'https://darkmora.uz/uploads/avatars/presets/naruto.jpg' },
+  { name: 'Tanjiro', url: 'https://darkmora.uz/uploads/avatars/presets/tanjiro.png' },
+  { name: 'Sasuke', url: 'https://darkmora.uz/uploads/avatars/presets/sasuke.jpg' },
+  { name: 'Killua', url: 'https://darkmora.uz/uploads/avatars/presets/killua.jpg' },
+  { name: 'Sukuna', url: 'https://darkmora.uz/uploads/avatars/presets/sukuna.png' },
+  { name: 'Anya', url: 'https://darkmora.uz/uploads/avatars/presets/anya.png' },
+  { name: 'Nezuko', url: 'https://darkmora.uz/uploads/avatars/presets/nezuko.png' },
+];
 
 export default function ProfileScreen({ navigation }) {
-  const { user, logout } = useAuth();
+  const { user, logout, updateProfile } = useAuth();
+
+  // Edit Modal State
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [displayName, setDisplayName] = useState('');
+  const [selectedAvatarUrl, setSelectedAvatarUrl] = useState('');
+  const [customAvatarUrl, setCustomAvatarUrl] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState('');
+  const [editSuccess, setEditSuccess] = useState('');
+
+  const openEditModal = () => {
+    if (!user) return;
+    setDisplayName(user.display_name || user.username || '');
+    setSelectedAvatarUrl(user.photo_url ? toAbsoluteUrl(user.photo_url) : '');
+    setCustomAvatarUrl('');
+    setNewPassword('');
+    setEditError('');
+    setEditSuccess('');
+    setEditModalVisible(true);
+  };
+
+  const handleSaveProfile = async () => {
+    setEditError('');
+    setEditSuccess('');
+    setSaving(true);
+    try {
+      const finalAvatar = customAvatarUrl.trim() || selectedAvatarUrl || (user?.photo_url ? toAbsoluteUrl(user.photo_url) : '');
+      const res = await updateProfile({
+        displayName: displayName.trim(),
+        photoUrl: finalAvatar,
+        password: newPassword ? newPassword.trim() : undefined,
+      });
+
+      if (res && res.ok) {
+        setEditSuccess('Profil ma\'lumotlari muvaffaqiyatli saqlandi!');
+        setTimeout(() => {
+          setEditModalVisible(false);
+        }, 800);
+      } else {
+        setEditError(res?.error || 'Saqlashda xatolik yuz berdi');
+      }
+    } catch (e) {
+      setEditError('Server bilan aloqada xatolik');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const openTelegram = () => {
     Linking.openURL('https://t.me/anirateuzrobot').catch(() => {});
@@ -31,6 +102,11 @@ export default function ProfileScreen({ navigation }) {
   const openWebsite = () => {
     Linking.openURL('https://darkmora.uz').catch(() => {});
   };
+
+  const userPhotoUri = user?.photo_url ? toAbsoluteUrl(user.photo_url) : null;
+  const userInitial = user?.display_name
+    ? user.display_name.charAt(0).toUpperCase()
+    : (user?.username?.charAt(0).toUpperCase() || 'U');
 
   return (
     <View style={styles.container}>
@@ -45,13 +121,22 @@ export default function ProfileScreen({ navigation }) {
         {/* User Card */}
         <View style={styles.userCard}>
           <View style={styles.avatarCircle}>
-            <User size={32} color={colors.primaryGlow} />
+            {userPhotoUri ? (
+              <Image source={{ uri: userPhotoUri }} style={styles.avatarImage} />
+            ) : user ? (
+              <View style={styles.initialFallback}>
+                <Text style={styles.initialText}>{userInitial}</Text>
+              </View>
+            ) : (
+              <User size={32} color={colors.primaryGlow} />
+            )}
           </View>
+
           <View style={{ flex: 1 }}>
             {user ? (
               <>
-                <Text style={styles.userName}>{user.username || user.name || 'Foydalanuvchi'}</Text>
-                <Text style={styles.userEmail}>{user.email || 'DarkMora a\'zosi'}</Text>
+                <Text style={styles.userName}>{user.display_name || user.username || 'Foydalanuvchi'}</Text>
+                <Text style={styles.userEmail}>{user.email || user.phone || 'DarkMora a\'zosi'}</Text>
               </>
             ) : (
               <>
@@ -61,7 +146,15 @@ export default function ProfileScreen({ navigation }) {
             )}
           </View>
 
-          {!user && (
+          {user ? (
+            <TouchableOpacity
+              style={styles.editBtnSmall}
+              onPress={openEditModal}
+            >
+              <Edit3 size={14} color="#fff" />
+              <Text style={styles.editBtnText}>Tahrirlash</Text>
+            </TouchableOpacity>
+          ) : (
             <TouchableOpacity
               style={styles.loginBtnSmall}
               onPress={() => navigation.navigate('Login')}
@@ -130,6 +223,134 @@ export default function ProfileScreen({ navigation }) {
           </TouchableOpacity>
         )}
       </ScrollView>
+
+      {/* ================= EDIT PROFILE MODAL ================= */}
+      <Modal
+        visible={editModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setEditModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Profilni tahrirlash</Text>
+              <TouchableOpacity
+                onPress={() => setEditModalVisible(false)}
+                style={styles.modalCloseBtn}
+              >
+                <X size={20} color="#fff" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={styles.modalBody}>
+              {editError ? <Text style={styles.modalError}>{editError}</Text> : null}
+              {editSuccess ? <Text style={styles.modalSuccess}>{editSuccess}</Text> : null}
+
+              {/* Avatar Preview */}
+              <View style={styles.avatarPreviewWrap}>
+                <View style={styles.modalAvatarCircle}>
+                  {customAvatarUrl.trim() || selectedAvatarUrl ? (
+                    <Image
+                      source={{ uri: toAbsoluteUrl(customAvatarUrl.trim() || selectedAvatarUrl) }}
+                      style={styles.modalAvatarImg}
+                    />
+                  ) : (
+                    <User size={40} color={colors.primaryGlow} />
+                  )}
+                </View>
+                <Text style={styles.avatarPreviewLabel}>Profil rasmini tanlang</Text>
+              </View>
+
+              {/* Avatar Presets Carousel */}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.presetsList}
+              >
+                {AVATAR_PRESETS.map((preset) => {
+                  const isSelected = selectedAvatarUrl === preset.url && !customAvatarUrl;
+                  return (
+                    <TouchableOpacity
+                      key={preset.name}
+                      style={[styles.presetItem, isSelected && styles.presetItemActive]}
+                      onPress={() => {
+                        setSelectedAvatarUrl(preset.url);
+                        setCustomAvatarUrl('');
+                      }}
+                    >
+                      <Image source={{ uri: preset.url }} style={styles.presetImg} />
+                      {isSelected && (
+                        <View style={styles.presetCheck}>
+                          <Check size={12} color="#fff" />
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
+              {/* Custom Photo URL Input */}
+              <Text style={styles.inputLabel}>Yoki rasm havolasini kiriting (URL)</Text>
+              <View style={styles.modalInputBox}>
+                <ImageIcon size={16} color={colors.textDim} />
+                <TextInput
+                  placeholder="https://... rasm havolasi"
+                  placeholderTextColor={colors.textDim}
+                  style={styles.modalInput}
+                  value={customAvatarUrl}
+                  onChangeText={(val) => {
+                    setCustomAvatarUrl(val);
+                    if (val) setSelectedAvatarUrl('');
+                  }}
+                  autoCapitalize="none"
+                />
+              </View>
+
+              {/* Display Name */}
+              <Text style={styles.inputLabel}>Ism (Taxallus)</Text>
+              <View style={styles.modalInputBox}>
+                <User size={16} color={colors.textDim} />
+                <TextInput
+                  placeholder="Ismingizni kiriting"
+                  placeholderTextColor={colors.textDim}
+                  style={styles.modalInput}
+                  value={displayName}
+                  onChangeText={setDisplayName}
+                />
+              </View>
+
+              {/* Password */}
+              <Text style={styles.inputLabel}>Yangi parol (o'zgartirish ixtiyoriy)</Text>
+              <View style={styles.modalInputBox}>
+                <Lock size={16} color={colors.textDim} />
+                <TextInput
+                  placeholder="Bo'sh qoldirilsa o'zgarmaydi"
+                  placeholderTextColor={colors.textDim}
+                  style={styles.modalInput}
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                  secureTextEntry
+                />
+              </View>
+
+              {/* Save Button */}
+              <TouchableOpacity
+                style={styles.modalSaveBtn}
+                activeOpacity={0.85}
+                onPress={handleSaveProfile}
+                disabled={saving}
+              >
+                {saving ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.modalSaveText}>Saqlash</Text>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -167,14 +388,32 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   avatarCircle: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: 'rgba(29, 104, 246, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(29, 104, 246, 0.3)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(29, 104, 246, 0.35)',
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 28,
+  },
+  initialFallback: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  initialText: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: '800',
   },
   userName: {
     color: '#fff',
@@ -185,6 +424,22 @@ const styles = StyleSheet.create({
     color: colors.textDim,
     fontSize: 12,
     marginTop: 2,
+  },
+  editBtnSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(29, 104, 246, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(29, 104, 246, 0.4)',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+  },
+  editBtnText: {
+    color: colors.primaryGlow,
+    fontSize: 12,
+    fontWeight: '700',
   },
   loginBtnSmall: {
     flexDirection: 'row',
@@ -254,6 +509,154 @@ const styles = StyleSheet.create({
   },
   logoutText: {
     color: colors.error,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    backgroundColor: '#0f1118',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    maxHeight: '90%',
+    paddingBottom: 30,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  modalTitle: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  modalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalBody: {
+    padding: 20,
+  },
+  modalError: {
+    color: colors.error,
+    fontSize: 13,
+    marginBottom: 12,
+  },
+  modalSuccess: {
+    color: '#34d399',
+    fontSize: 13,
+    marginBottom: 12,
+  },
+  avatarPreviewWrap: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalAvatarCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 2,
+    borderColor: colors.primaryGlow,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(29, 104, 246, 0.15)',
+    marginBottom: 8,
+  },
+  modalAvatarImg: {
+    width: '100%',
+    height: '100%',
+  },
+  avatarPreviewLabel: {
+    color: colors.textDim,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  presetsList: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingVertical: 8,
+    marginBottom: 16,
+  },
+  presetItem: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'transparent',
+    position: 'relative',
+  },
+  presetItemActive: {
+    borderColor: colors.primaryGlow,
+    transform: [{ scale: 1.05 }],
+  },
+  presetImg: {
+    width: '100%',
+    height: '100%',
+  },
+  presetCheck: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    width: 16,
+    height: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  inputLabel: {
+    color: colors.textDim,
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 6,
+    marginTop: 4,
+  },
+  modalInputBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.bgCard,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 46,
+    marginBottom: 14,
+    gap: 10,
+  },
+  modalInput: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 13,
+  },
+  modalSaveBtn: {
+    backgroundColor: colors.primary,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 10,
+    marginBottom: 20,
+  },
+  modalSaveText: {
+    color: '#fff',
     fontSize: 14,
     fontWeight: '700',
   },

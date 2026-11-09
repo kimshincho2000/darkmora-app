@@ -84,6 +84,13 @@ export default function LoginScreen({ navigation }) {
         </View>
 
         <TouchableOpacity
+          style={styles.forgotPassBtn}
+          onPress={() => navigation.navigate('ForgotPassword')}
+        >
+          <Text style={styles.forgotPassText}>Parolni unutdingizmi?</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
           style={styles.submitBtn}
           activeOpacity={0.85}
           onPress={handleLogin}
@@ -161,6 +168,16 @@ const styles = StyleSheet.create({
     flex: 1,
     color: '#fff',
     fontSize: 14,
+  },
+  forgotPassBtn: {
+    alignSelf: 'flex-end',
+    marginBottom: 16,
+    paddingVertical: 4,
+  },
+  forgotPassText: {
+    color: colors.primaryGlow,
+    fontSize: 12,
+    fontWeight: '600',
   },
   submitBtn: {
     backgroundColor: colors.primary,

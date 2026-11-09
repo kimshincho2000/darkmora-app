@@ -8,6 +8,7 @@ const AuthContext = createContext({
   register: async () => {},
   logout: async () => {},
   refreshUser: async () => {},
+  updateProfile: async () => {},
 });
 
 export const AuthProvider = ({ children }) => {
@@ -45,13 +46,21 @@ export const AuthProvider = ({ children }) => {
     return res;
   };
 
+  const updateProfile = async (data) => {
+    const res = await api.updateProfile(data);
+    if (res?.ok) {
+      await refreshUser();
+    }
+    return res;
+  };
+
   const logout = async () => {
     await api.logout();
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser, updateProfile }}>
       {children}
     </AuthContext.Provider>
   );
