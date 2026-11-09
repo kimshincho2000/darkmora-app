@@ -50,7 +50,7 @@ export default function MyListScreen({ navigation }) {
             </Text>
             <TouchableOpacity
               style={styles.exploreBtn}
-              onPress={() => navigation.navigate('Catalog')}
+              onPress={() => navigation.navigate('CatalogTab')}
             >
               <Text style={styles.exploreBtnText}>Katalogni ko'rish</Text>
             </TouchableOpacity>

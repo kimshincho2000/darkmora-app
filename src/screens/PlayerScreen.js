@@ -23,6 +23,9 @@ import {
   SkipForward,
   SkipBack,
   Sliders,
+  ArrowUpDown,
+  LayoutGrid,
+  LayoutList,
 } from 'lucide-react-native';
 import { colors } from '../theme/colors';
 import { toAbsoluteUrl } from '../api/client';
@@ -51,6 +54,50 @@ export default function PlayerScreen({ navigation, route }) {
   const [durationMillis, setDurationMillis] = useState(0);
   const [showControls, setShowControls] = useState(true);
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
+  const [sortOrder, setSortOrder] = useState('asc'); // 'asc' | 'desc'
+  const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
+  const [activeRangeIndex, setActiveRangeIndex] = useState(0);
+
+  const sortedEpisodes = React.useMemo(() => {
+    return [...episodes].sort((a, b) => {
+      const numA = parseInt(a.qism || a.episode_number || 0, 10);
+      const numB = parseInt(b.qism || b.episode_number || 0, 10);
+      return sortOrder === 'asc' ? numA - numB : numB - numA;
+    });
+  }, [episodes, sortOrder]);
+
+  const CHUNK_SIZE = 50;
+  const episodeRanges = React.useMemo(() => {
+    if (sortedEpisodes.length <= CHUNK_SIZE) return [];
+    const ranges = [];
+    for (let i = 0; i < sortedEpisodes.length; i += CHUNK_SIZE) {
+      const chunk = sortedEpisodes.slice(i, i + CHUNK_SIZE);
+      const firstEp = parseInt(chunk[0]?.qism || chunk[0]?.episode_number || i + 1, 10);
+      const lastEp = parseInt(chunk[chunk.length - 1]?.qism || chunk[chunk.length - 1]?.episode_number || i + chunk.length, 10);
+      ranges.push({
+        label: `${firstEp} - ${lastEp}`,
+        startIndex: i,
+        endIndex: i + CHUNK_SIZE,
+      });
+    }
+    return ranges;
+  }, [sortedEpisodes]);
+
+  useEffect(() => {
+    if (episodeRanges.length > 0) {
+      const foundIdx = episodeRanges.findIndex((r) => {
+        const chunk = sortedEpisodes.slice(r.startIndex, r.endIndex);
+        return chunk.some((e) => parseInt(e.qism || e.episode_number, 10) === currentEpNum);
+      });
+      if (foundIdx !== -1) setActiveRangeIndex(foundIdx);
+    }
+  }, [currentEpNum, episodeRanges, sortedEpisodes]);
+
+  const displayedEpisodes = React.useMemo(() => {
+    if (episodeRanges.length === 0) return sortedEpisodes;
+    const currentRange = episodeRanges[activeRangeIndex] || episodeRanges[0];
+    return sortedEpisodes.slice(currentRange.startIndex, currentRange.endIndex);
+  }, [sortedEpisodes, episodeRanges, activeRangeIndex]);
 
   // Find active episode
   const currentEpIndex = episodes.findIndex(
@@ -273,36 +320,120 @@ export default function PlayerScreen({ navigation, route }) {
             </View>
           </View>
 
-          {/* Episodes List */}
+          {/* Episodes List Section */}
           <View style={styles.episodesListSection}>
-            <Text style={styles.episodesListHeading}>Qismlar ro'yxati</Text>
-            <View style={styles.epList}>
-              {episodes.map((ep, idx) => {
-                const epNum = parseInt(ep.qism || ep.episode_number || idx + 1, 10);
-                const isActive = epNum === currentEpNum;
-                return (
+            <View style={styles.epHeaderRow}>
+              <Text style={styles.episodesListHeading}>Qismlar ({episodes.length})</Text>
+
+              {episodes.length > 0 && (
+                <View style={styles.epControls}>
                   <TouchableOpacity
-                    key={`p-ep-${ep.id || idx}`}
-                    style={[styles.epItem, isActive && styles.epItemActive]}
-                    onPress={() => changeEpisode(epNum)}
+                    style={styles.epSortBtn}
+                    onPress={() => {
+                      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+                      setActiveRangeIndex(0);
+                    }}
+                    activeOpacity={0.7}
                   >
-                    <View style={[styles.epBadge, isActive && styles.epBadgeActive]}>
+                    <ArrowUpDown size={12} color={colors.primaryGlow} />
+                    <Text style={styles.epSortText}>
+                      {sortOrder === 'asc' ? `1 ➔ ${episodes.length}` : `${episodes.length} ➔ 1`}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.epViewToggle}
+                    onPress={() => setViewMode((prev) => (prev === 'grid' ? 'list' : 'grid'))}
+                    activeOpacity={0.7}
+                  >
+                    {viewMode === 'grid' ? (
+                      <LayoutList size={15} color={colors.text} />
+                    ) : (
+                      <LayoutGrid size={15} color={colors.text} />
+                    )}
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+
+            {/* Range Tabs (if > 50 episodes) */}
+            {episodeRanges.length > 1 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.rangeScroll}
+              >
+                {episodeRanges.map((range, idx) => {
+                  const isActive = idx === activeRangeIndex;
+                  return (
+                    <TouchableOpacity
+                      key={`p-range-${idx}`}
+                      style={[styles.rangeTab, isActive && styles.rangeTabActive]}
+                      onPress={() => setActiveRangeIndex(idx)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.rangeTabText, isActive && styles.rangeTabTextActive]}>
+                        {range.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
+
+            {/* View Modes */}
+            {viewMode === 'grid' ? (
+              <View style={styles.epGridWrap}>
+                {displayedEpisodes.map((ep, idx) => {
+                  const epNum = parseInt(ep.qism || ep.episode_number || idx + 1, 10);
+                  const isActive = epNum === currentEpNum;
+                  return (
+                    <TouchableOpacity
+                      key={`p-ep-g-${ep.id || idx}`}
+                      style={[styles.epGridBox, isActive && styles.epGridBoxActive]}
+                      activeOpacity={0.75}
+                      onPress={() => changeEpisode(epNum)}
+                    >
                       {isActive ? (
                         <Play size={12} color="#fff" fill="#fff" />
                       ) : (
-                        <Text style={styles.epBadgeText}>{epNum}</Text>
+                        <Text style={[styles.epGridNum, isActive && styles.epGridNumActive]}>
+                          {epNum}
+                        </Text>
                       )}
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.epItemTitle, isActive && styles.epItemTitleActive]}>
-                        {epNum}-qism {ep.title && ep.title !== `${epNum}-qism` ? `- ${ep.title}` : ''}
-                      </Text>
-                      <Text style={styles.epItemMeta}>DarkMora Dublyaj</Text>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ) : (
+              <View style={styles.epList}>
+                {displayedEpisodes.map((ep, idx) => {
+                  const epNum = parseInt(ep.qism || ep.episode_number || idx + 1, 10);
+                  const isActive = epNum === currentEpNum;
+                  return (
+                    <TouchableOpacity
+                      key={`p-ep-l-${ep.id || idx}`}
+                      style={[styles.epItem, isActive && styles.epItemActive]}
+                      onPress={() => changeEpisode(epNum)}
+                    >
+                      <View style={[styles.epBadge, isActive && styles.epBadgeActive]}>
+                        {isActive ? (
+                          <Play size={12} color="#fff" fill="#fff" />
+                        ) : (
+                          <Text style={styles.epBadgeText}>{epNum}</Text>
+                        )}
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.epItemTitle, isActive && styles.epItemTitleActive]}>
+                          {epNum}-qism {ep.title && ep.title !== `${epNum}-qism` ? `- ${ep.title}` : ''}
+                        </Text>
+                        <Text style={styles.epItemMeta}>DarkMora Dublyaj</Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
           </View>
         </ScrollView>
       )}
@@ -438,11 +569,100 @@ const styles = StyleSheet.create({
   episodesListSection: {
     paddingBottom: 40,
   },
+  epHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
   episodesListHeading: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '800',
-    marginBottom: 12,
+  },
+  epControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  epSortBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(29, 104, 246, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.35)',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  epSortText: {
+    color: colors.primaryGlow,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  epViewToggle: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: colors.bgCard,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  rangeScroll: {
+    gap: 8,
+    paddingBottom: 12,
+  },
+  rangeTab: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: colors.bgCard,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  rangeTabActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primaryGlow,
+  },
+  rangeTabText: {
+    color: colors.textDim,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  rangeTabTextActive: {
+    color: '#fff',
+    fontWeight: '800',
+  },
+  epGridWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  epGridBox: {
+    width: (SCREEN_WIDTH - 32 - 32) / 5,
+    height: 42,
+    borderRadius: 10,
+    backgroundColor: colors.bgCard,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  epGridBoxActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primaryGlow,
+  },
+  epGridNum: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  epGridNumActive: {
+    color: '#fff',
+    fontWeight: '800',
   },
   epList: {
     gap: 8,

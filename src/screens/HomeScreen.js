@@ -204,7 +204,7 @@ export default function HomeScreen({ navigation }) {
               </View>
               <TouchableOpacity
                 style={styles.seeAllBtn}
-                onPress={() => navigation.navigate('Catalog', { sort: 'latest' })}
+                onPress={() => navigation.navigate('CatalogTab', { sort: 'latest' })}
               >
                 <Text style={styles.seeAllText}>Barchasi</Text>
                 <ChevronRight size={14} color={colors.primaryGlow} />
@@ -271,7 +271,7 @@ export default function HomeScreen({ navigation }) {
               </View>
               <TouchableOpacity
                 style={styles.seeAllBtn}
-                onPress={() => navigation.navigate('Catalog', { sort: 'popular' })}
+                onPress={() => navigation.navigate('CatalogTab', { sort: 'popular' })}
               >
                 <Text style={styles.seeAllText}>Barchasi</Text>
                 <ChevronRight size={14} color={colors.primaryGlow} />
