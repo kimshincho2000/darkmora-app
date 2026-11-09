@@ -132,9 +132,10 @@ export default function AppUpdateModal() {
         targetFile,
         {},
         (downloadProgress) => {
-          const total = downloadProgress.totalBytesExpectedToWrite;
+          const rawTotal = downloadProgress.totalBytesExpectedToWrite;
           const written = downloadProgress.totalBytesWritten;
-          if (total > 0) {
+          const total = rawTotal > 0 ? rawTotal : 93741023; // 89.4 MB fallback
+          if (written > 0) {
             const p = Math.min(1, Math.max(0, written / total));
             setProgress(p);
             setDownloadStats({
