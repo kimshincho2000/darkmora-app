@@ -185,7 +185,14 @@ export default function ProfileScreen({ navigation }) {
             {user ? (
               <>
                 <Text style={styles.userName}>{user.display_name || user.username || 'Foydalanuvchi'}</Text>
-                <Text style={styles.userEmail}>{user.email || user.phone || 'DarkMora a\'zosi'}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
+                  <Text style={styles.userEmail}>{user.email || user.phone || 'DarkMora a\'zosi'}</Text>
+                  <View style={styles.userCodeBadge}>
+                    <Text style={styles.userCodeText}>
+                      ID: {user.user_code || (user.db_id ? String(100000 + Number(user.db_id)) : '100001')}
+                    </Text>
+                  </View>
+                </View>
               </>
             ) : (
               <>
@@ -860,5 +867,19 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '800',
     color: '#38bdf8',
+  },
+  userCodeBadge: {
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.4)',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+  },
+  userCodeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#38bdf8',
+    letterSpacing: 0.5,
   },
 });

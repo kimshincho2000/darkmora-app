@@ -288,6 +288,14 @@ export const api = {
     });
   },
 
+  chatSearchUsers: async (q = '') => {
+    return await apiRequest(`/api?action=chat_search_users&q=${encodeURIComponent(q)}`);
+  },
+
+  chatGetDirectRooms: async () => {
+    return await apiRequest('/api?action=chat_get_direct_rooms');
+  },
+
   watchPartyList: async () => {
     return await apiRequest('/api?action=watch_party_list');
   },

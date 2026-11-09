@@ -22,6 +22,7 @@ import {
   MessageCircle,
   Tv,
   Users,
+  User,
   Mic,
   MicOff,
   Plus,
@@ -35,6 +36,9 @@ import {
   LogIn,
   Check,
   CheckCheck,
+  Search,
+  X,
+  MessageSquare,
 } from 'lucide-react-native';
 import { colors } from '../theme/colors';
 import { useAuth } from '../context/AuthContext';
@@ -42,17 +46,33 @@ import { api, toAbsoluteUrl } from '../api/client';
 
 export default function ChatScreen({ navigation }) {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState('chat'); // 'chat' | 'party'
+  const [activeTab, setActiveTab] = useState('chat'); // 'chat' | 'direct' | 'party'
   const [chatEnabled, setChatEnabled] = useState(true);
   const [partyEnabled, setPartyEnabled] = useState(true);
 
-  // Chat State
+  // Global Chat State
   const [messages, setMessages] = useState([]);
   const [loadingMessages, setLoadingMessages] = useState(true);
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
   const flatListRef = useRef(null);
   const pollTimerRef = useRef(null);
+
+  // Direct Chats State
+  const [directSearchQuery, setDirectSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchingUsers, setSearchingUsers] = useState(false);
+  const [conversations, setConversations] = useState([]);
+  const [loadingConversations, setLoadingConversations] = useState(false);
+
+  // Direct Chat Modal (Active 1-on-1 Conversation)
+  const [activeDirectUser, setActiveDirectUser] = useState(null);
+  const [directMessages, setDirectMessages] = useState([]);
+  const [loadingDirectMsgs, setLoadingDirectMsgs] = useState(false);
+  const [directInputText, setDirectInputText] = useState('');
+  const [sendingDirect, setSendingDirect] = useState(false);
+  const directFlatListRef = useRef(null);
+  const directPollTimerRef = useRef(null);
 
   // Watch Party State
   const [rooms, setRooms] = useState([]);
@@ -88,7 +108,7 @@ export default function ChatScreen({ navigation }) {
     })();
   }, []);
 
-  // 2. Fetch Chat Messages
+  // 2. Fetch Global Chat Messages
   const loadMessages = useCallback(async (quiet = false) => {
     try {
       if (!quiet) setLoadingMessages(true);
@@ -103,7 +123,23 @@ export default function ChatScreen({ navigation }) {
     }
   }, []);
 
-  // 3. Fetch Watch Party Rooms
+  // 3. Fetch Direct Conversations
+  const loadConversations = useCallback(async () => {
+    if (!user) return;
+    try {
+      setLoadingConversations(true);
+      const res = await api.chatGetDirectRooms();
+      if (res?.ok && res?.data?.rooms) {
+        setConversations(res.data.rooms);
+      }
+    } catch (e) {
+      console.warn('loadConversations error:', e);
+    } finally {
+      setLoadingConversations(false);
+    }
+  }, [user]);
+
+  // 4. Fetch Watch Party Rooms
   const loadRooms = useCallback(async () => {
     try {
       setLoadingRooms(true);
@@ -118,13 +154,55 @@ export default function ChatScreen({ navigation }) {
     }
   }, []);
 
-  // Real-time polling
+  // Helper: Construct DM Room ID
+  const getDmRoomId = (otherId) => {
+    const myId = user?.id || user?.db_id || 0;
+    const a = Math.min(Number(myId), Number(otherId));
+    const b = Math.max(Number(myId), Number(otherId));
+    return `dm_${a}_${b}`;
+  };
+
+  // 5. Load Direct Messages for activeDirectUser
+  const loadDirectMessages = useCallback(async (quiet = false) => {
+    if (!activeDirectUser) return;
+    const dmRoom = getDmRoomId(activeDirectUser.id);
+    try {
+      if (!quiet) setLoadingDirectMsgs(true);
+      const res = await api.chatGetMessages(dmRoom, 60);
+      if (res?.ok && res?.data?.messages) {
+        setDirectMessages(res.data.messages);
+      }
+    } catch (e) {
+      console.warn('loadDirectMessages error:', e);
+    } finally {
+      if (!quiet) setLoadingDirectMsgs(false);
+    }
+  }, [activeDirectUser, user]);
+
+  // Polling for Direct Chat Modal
+  useEffect(() => {
+    if (activeDirectUser) {
+      loadDirectMessages();
+      directPollTimerRef.current = setInterval(() => {
+        loadDirectMessages(true);
+      }, 3000);
+    } else {
+      if (directPollTimerRef.current) clearInterval(directPollTimerRef.current);
+    }
+    return () => {
+      if (directPollTimerRef.current) clearInterval(directPollTimerRef.current);
+    };
+  }, [activeDirectUser, loadDirectMessages]);
+
+  // Real-time polling for Tabs
   useEffect(() => {
     if (activeTab === 'chat' && chatEnabled) {
       loadMessages();
       pollTimerRef.current = setInterval(() => {
         loadMessages(true);
       }, 3000);
+    } else if (activeTab === 'direct' && chatEnabled) {
+      loadConversations();
     } else if (activeTab === 'party' && partyEnabled) {
       loadRooms();
       pollTimerRef.current = setInterval(() => {
@@ -135,9 +213,42 @@ export default function ChatScreen({ navigation }) {
     return () => {
       if (pollTimerRef.current) clearInterval(pollTimerRef.current);
     };
-  }, [activeTab, chatEnabled, partyEnabled, loadMessages, loadRooms]);
+  }, [activeTab, chatEnabled, partyEnabled, loadMessages, loadConversations, loadRooms]);
 
-  // Handle Send Message
+  // Search Users Handler
+  const handleSearchUsers = async (query) => {
+    setDirectSearchQuery(query);
+    if (!query.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    setSearchingUsers(true);
+    try {
+      const res = await api.chatSearchUsers(query.trim());
+      if (res?.ok && res?.data?.users) {
+        setSearchResults(res.data.users);
+      }
+    } catch (e) {
+      console.warn('search users error:', e);
+    } finally {
+      setSearchingUsers(false);
+    }
+  };
+
+  // Open Direct Chat with user
+  const openDirectChat = (targetUser) => {
+    if (!user) {
+      Alert.alert('Kirish talab etiladi', 'Shaxsiy xabar yozish uchun avval hisobingizga kiring.', [
+        { text: 'Bekor qilish', style: 'cancel' },
+        { text: 'Kirish', onPress: () => navigation.navigate('Login') },
+      ]);
+      return;
+    }
+    setActiveDirectUser(targetUser);
+    setDirectMessages([]);
+  };
+
+  // Handle Send Global Message
   const handleSendMessage = async () => {
     if (!user) {
       Alert.alert('Kirish talab etiladi', 'Xabar yozish uchun avval hisobingizga kiring.', [
@@ -165,6 +276,32 @@ export default function ChatScreen({ navigation }) {
       Alert.alert('Xato', e.message);
     } finally {
       setSending(false);
+    }
+  };
+
+  // Handle Send Direct Message
+  const handleSendDirectMessage = async () => {
+    if (!user || !activeDirectUser) return;
+    const trimmed = directInputText.trim();
+    if (!trimmed || sendingDirect) return;
+
+    const dmRoom = getDmRoomId(activeDirectUser.id);
+    setSendingDirect(true);
+    setDirectInputText('');
+    try {
+      const res = await api.chatSendMessage(trimmed, dmRoom);
+      if (res?.ok && res?.data?.message) {
+        setDirectMessages((prev) => [...prev, res.data.message]);
+        setTimeout(() => {
+          directFlatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      } else {
+        Alert.alert('Xato', res?.error || 'Xabarni yuborib bo\'lmadi');
+      }
+    } catch (e) {
+      Alert.alert('Xato', e.message);
+    } finally {
+      setSendingDirect(false);
     }
   };
 
@@ -212,7 +349,7 @@ export default function ChatScreen({ navigation }) {
   const handleJoinByCode = async (codeToJoin) => {
     const code = (codeToJoin || joinCode).trim().toUpperCase();
     if (!code) {
-      Alert.alert('Xato', 'Xona kodini kiriting (masalan: DM1234)');
+      Alert.alert('Xato', 'Xona kodini kiriting (masalan: DM7890)');
       return;
     }
 
@@ -278,20 +415,34 @@ export default function ChatScreen({ navigation }) {
             </View>
           </View>
           <Text style={styles.headerSub}>
-            {activeTab === 'chat' ? '💬 Umumiy Jonli Suhbat' : '🍿 Do\'stlar bilan birga ko\'rish'}
+            {activeTab === 'chat'
+              ? '💬 Umumiy Jonli Suhbat'
+              : activeTab === 'direct'
+              ? '👤 Shaxsiy Chatlar (1-ga-1)'
+              : '🍿 Do\'stlar bilan birga ko\'rish'}
           </Text>
         </View>
       </View>
 
-      {/* Segmented Top Switcher */}
+      {/* Segmented Top Switcher (3 Tabs) */}
       <View style={styles.tabsRow}>
         <TouchableOpacity
           style={[styles.tabBtn, activeTab === 'chat' && styles.tabBtnActive]}
           onPress={() => setActiveTab('chat')}
         >
-          <MessageCircle size={16} color={activeTab === 'chat' ? colors.primaryGlow : colors.textDim} />
+          <MessageCircle size={15} color={activeTab === 'chat' ? colors.primaryGlow : colors.textDim} />
           <Text style={[styles.tabBtnText, activeTab === 'chat' && styles.tabBtnTextActive]}>
-            Jonli Chat
+            Umumiy
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tabBtn, activeTab === 'direct' && styles.tabBtnActive]}
+          onPress={() => setActiveTab('direct')}
+        >
+          <User size={15} color={activeTab === 'direct' ? '#38bdf8' : colors.textDim} />
+          <Text style={[styles.tabBtnText, activeTab === 'direct' && { color: '#38bdf8', fontWeight: '800' }]}>
+            Shaxsiy
           </Text>
         </TouchableOpacity>
 
@@ -299,14 +450,14 @@ export default function ChatScreen({ navigation }) {
           style={[styles.tabBtn, activeTab === 'party' && styles.tabBtnActive]}
           onPress={() => setActiveTab('party')}
         >
-          <Tv size={16} color={activeTab === 'party' ? '#fbbf24' : colors.textDim} />
+          <Tv size={15} color={activeTab === 'party' ? '#fbbf24' : colors.textDim} />
           <Text style={[styles.tabBtnText, activeTab === 'party' && { color: '#fbbf24', fontWeight: '800' }]}>
             Watch Party
           </Text>
         </TouchableOpacity>
       </View>
 
-      {/* ================= TAB 1: JONLI CHAT (TELEGRAM USLUBIDA) ================= */}
+      {/* ================= TAB 1: UMUMIY JONLI CHAT ================= */}
       {activeTab === 'chat' && (
         !chatEnabled ? (
           <View style={styles.disabledBox}>
@@ -380,7 +531,134 @@ export default function ChatScreen({ navigation }) {
         )
       )}
 
-      {/* ================= TAB 2: WATCH PARTY (DISCORD USLUBIDA) ================= */}
+      {/* ================= TAB 2: SHAXSIY CHATLAR (USER SEARCH & 6-DIGIT ID) ================= */}
+      {activeTab === 'direct' && (
+        <View style={styles.directContainer}>
+          {/* Search Bar for Users by Username or 6-digit ID */}
+          <View style={styles.searchBarWrap}>
+            <Search size={18} color={colors.textDim} />
+            <TextInput
+              style={styles.directSearchInput}
+              value={directSearchQuery}
+              onChangeText={handleSearchUsers}
+              placeholder="Username yoki 6 xonali ID (masalan: 100001)..."
+              placeholderTextColor={colors.textDim}
+              autoCapitalize="none"
+            />
+            {directSearchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => handleSearchUsers('')}>
+                <X size={16} color={colors.textDim} />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Search Results if query entered */}
+          {directSearchQuery.trim().length > 0 ? (
+            <View style={{ flex: 1 }}>
+              <Text style={styles.directSectionTitle}>Qidiruv natijalari:</Text>
+              {searchingUsers ? (
+                <ActivityIndicator size="small" color="#38bdf8" style={{ marginTop: 20 }} />
+              ) : searchResults.length === 0 ? (
+                <View style={styles.emptyWrap}>
+                  <Text style={styles.emptyText}>Foydalanuvchi topilmadi</Text>
+                  <Text style={styles.emptySub}>Username yoki 6 xonali ID ni to'g'ri kiritganingizni tekshiring.</Text>
+                </View>
+              ) : (
+                <FlatList
+                  data={searchResults}
+                  keyExtractor={(item) => String(item.id)}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={styles.userSearchCard}
+                      onPress={() => openDirectChat(item)}
+                      activeOpacity={0.7}
+                    >
+                      <Image
+                        source={{
+                          uri: item.photo_url || 'https://darkmora.uz/uploads/avatars/presets/luffy.jpg',
+                        }}
+                        style={styles.directAvatar}
+                      />
+                      <View style={{ flex: 1, marginLeft: 12 }}>
+                        <Text style={styles.directUserName}>{item.display_name || item.username}</Text>
+                        <Text style={styles.directUserSub}>@{item.username}</Text>
+                      </View>
+                      <View style={styles.directIdBadge}>
+                        <Text style={styles.directIdText}>ID: {item.user_code}</Text>
+                      </View>
+                      <TouchableOpacity
+                        style={styles.startChatBtn}
+                        onPress={() => openDirectChat(item)}
+                      >
+                        <MessageSquare size={16} color="#38bdf8" />
+                      </TouchableOpacity>
+                    </TouchableOpacity>
+                  )}
+                />
+              )}
+            </View>
+          ) : (
+            /* Recent Conversations */
+            <View style={{ flex: 1 }}>
+              <View style={styles.directHeaderRow}>
+                <Text style={styles.directSectionTitle}>Yozishmalar</Text>
+                <TouchableOpacity onPress={loadConversations}>
+                  <Text style={styles.refreshLink}>Yangilash</Text>
+                </TouchableOpacity>
+              </View>
+
+              {loadingConversations ? (
+                <ActivityIndicator size="small" color="#38bdf8" style={{ marginTop: 20 }} />
+              ) : conversations.length === 0 ? (
+                <View style={styles.emptyWrap}>
+                  <MessageSquare size={40} color={colors.textDim} />
+                  <Text style={styles.emptyText}>Hali shaxsiy yozishmalar yo'q</Text>
+                  <Text style={styles.emptySub}>
+                    Yuqoridagi qidiruv orqali do'stingizning username yoki 6-xonali ID raqamini kiriting va suhbatni boshlang!
+                  </Text>
+                </View>
+              ) : (
+                <FlatList
+                  data={conversations}
+                  keyExtractor={(item) => item.room_id}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={styles.conversationCard}
+                      onPress={() => openDirectChat(item.other_user)}
+                      activeOpacity={0.7}
+                    >
+                      <Image
+                        source={{
+                          uri: item.other_user.photo_url || 'https://darkmora.uz/uploads/avatars/presets/luffy.jpg',
+                        }}
+                        style={styles.directAvatar}
+                      />
+                      <View style={{ flex: 1, marginLeft: 12 }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <Text style={styles.directUserName} numberOfLines={1}>
+                            {item.other_user.display_name || item.other_user.username}
+                          </Text>
+                          <Text style={styles.convTime}>{item.last_time}</Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 3 }}>
+                          <Text style={styles.convLastMsg} numberOfLines={1}>
+                            {item.is_me ? 'Siz: ' : ''}{item.last_message}
+                          </Text>
+                          <View style={styles.directIdBadgeSmall}>
+                            <Text style={styles.directIdTextSmall}>ID: {item.other_user.user_code}</Text>
+                          </View>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  )}
+                />
+              )}
+            </View>
+          )}
+        </View>
+      )}
+
+      {/* ================= TAB 3: WATCH PARTY (DISCORD USLUBIDA) ================= */}
       {activeTab === 'party' && (
         !partyEnabled ? (
           <View style={styles.disabledBox}>
@@ -487,7 +765,91 @@ export default function ChatScreen({ navigation }) {
         )
       )}
 
-      {/* ================= MODAL: CREATE ROOM ================= */}
+      {/* ================= MODAL: DIRECT 1-ON-1 CHAT ROOM ================= */}
+      <Modal visible={!!activeDirectUser} animationType="slide" transparent={false}>
+        <SafeAreaView style={styles.directChatModalContainer}>
+          <StatusBar barStyle="light-content" backgroundColor="#0b0e14" />
+
+          {/* Direct Chat Header */}
+          <View style={styles.directModalHeader}>
+            <TouchableOpacity style={styles.backBtn} onPress={() => setActiveDirectUser(null)}>
+              <ChevronLeft size={24} color="#fff" />
+            </TouchableOpacity>
+            <Image
+              source={{
+                uri: activeDirectUser?.photo_url || 'https://darkmora.uz/uploads/avatars/presets/luffy.jpg',
+              }}
+              style={styles.directHeaderAvatar}
+            />
+            <View style={{ flex: 1, marginLeft: 10 }}>
+              <Text style={styles.directHeaderName} numberOfLines={1}>
+                {activeDirectUser?.display_name || activeDirectUser?.username}
+              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.directHeaderUsername}>@{activeDirectUser?.username}</Text>
+                <View style={styles.directIdBadgeSmall}>
+                  <Text style={styles.directIdTextSmall}>ID: {activeDirectUser?.user_code}</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+
+          {/* Direct Messages List */}
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+          >
+            {loadingDirectMsgs && directMessages.length === 0 ? (
+              <ActivityIndicator size="large" color="#38bdf8" style={{ marginTop: 40 }} />
+            ) : (
+              <FlatList
+                ref={directFlatListRef}
+                data={directMessages}
+                keyExtractor={(item) => String(item.id)}
+                renderItem={renderMessageItem}
+                contentContainerStyle={styles.messagesListContent}
+                onContentSizeChange={() => directFlatListRef.current?.scrollToEnd({ animated: false })}
+                ListEmptyComponent={() => (
+                  <View style={styles.emptyWrap}>
+                    <MessageSquare size={40} color={colors.textDim} />
+                    <Text style={styles.emptyText}>Hozircha xabar yo'q</Text>
+                    <Text style={styles.emptySub}>
+                      {activeDirectUser?.display_name || activeDirectUser?.username} ga birinchi xabaringizni yozing!
+                    </Text>
+                  </View>
+                )}
+              />
+            )}
+
+            {/* Direct Input Bar */}
+            <View style={styles.inputBar}>
+              <TextInput
+                style={styles.chatInput}
+                value={directInputText}
+                onChangeText={setDirectInputText}
+                placeholder="Shaxsiy xabar yozing..."
+                placeholderTextColor={colors.textDim}
+                multiline
+                maxLength={1000}
+              />
+              <TouchableOpacity
+                style={[styles.sendBtn, { backgroundColor: '#38bdf8' }, !directInputText.trim() && { opacity: 0.5 }]}
+                onPress={handleSendDirectMessage}
+                disabled={!directInputText.trim() || sendingDirect}
+              >
+                {sendingDirect ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Send size={18} color="#fff" />
+                )}
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* ================= MODAL: CREATE WATCH PARTY ROOM ================= */}
       <Modal visible={createModalVisible} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
@@ -833,6 +1195,152 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
+  // Direct Chats Tab Styles
+  directContainer: {
+    flex: 1,
+    padding: 14,
+  },
+  searchBarWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    paddingHorizontal: 12,
+    height: 44,
+    marginBottom: 14,
+  },
+  directSearchInput: {
+    flex: 1,
+    marginLeft: 8,
+    color: '#fff',
+    fontSize: 13,
+  },
+  directSectionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textDim,
+    marginBottom: 10,
+  },
+  userSearchCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    padding: 10,
+    marginBottom: 8,
+  },
+  directAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#1e293b',
+  },
+  directUserName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  directUserSub: {
+    fontSize: 12,
+    color: colors.textDim,
+    marginTop: 2,
+  },
+  directIdBadge: {
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.35)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  directIdText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#38bdf8',
+  },
+  directIdBadgeSmall: {
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.35)',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  directIdTextSmall: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#38bdf8',
+  },
+  startChatBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  directHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  conversationCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
+    padding: 12,
+    marginBottom: 8,
+  },
+  convTime: {
+    fontSize: 11,
+    color: colors.textDim,
+  },
+  convLastMsg: {
+    fontSize: 12,
+    color: colors.textDim,
+    flex: 1,
+    marginRight: 8,
+  },
+
+  // Direct Chat Modal (Active 1-on-1 Conversation)
+  directChatModalContainer: {
+    flex: 1,
+    backgroundColor: '#0b0e14',
+  },
+  directModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  directHeaderAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#1e293b',
+    marginLeft: 8,
+  },
+  directHeaderName: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#fff',
+  },
+  directHeaderUsername: {
+    fontSize: 11,
+    color: colors.textDim,
+  },
+
   // Watch Party
   partyContainer: {
     flex: 1,
@@ -1032,15 +1540,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 60,
     gap: 8,
+    paddingHorizontal: 20,
   },
   emptyText: {
     fontSize: 14,
     color: '#fff',
     fontWeight: '700',
+    textAlign: 'center',
   },
   emptySub: {
     fontSize: 12,
     color: colors.textDim,
+    textAlign: 'center',
   },
 
   // Modal
