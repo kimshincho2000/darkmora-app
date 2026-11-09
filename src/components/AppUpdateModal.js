@@ -7,9 +7,22 @@ import {
   TouchableOpacity,
   Linking,
   Platform,
+  ActivityIndicator,
+  DeviceEventEmitter,
+  Alert,
 } from 'react-native';
 import Constants from 'expo-constants';
-import { DownloadCloud, Sparkles, X, AlertTriangle } from 'lucide-react-native';
+import * as FileSystem from 'expo-file-system';
+import * as IntentLauncher from 'expo-intent-launcher';
+import {
+  DownloadCloud,
+  Sparkles,
+  X,
+  AlertTriangle,
+  CheckCircle2,
+  ExternalLink,
+  RefreshCw,
+} from 'lucide-react-native';
 import { api } from '../api/client';
 import { colors } from '../theme/colors';
 
@@ -33,58 +46,147 @@ export default function AppUpdateModal() {
   const [updateInfo, setUpdateInfo] = useState(null);
   const [maintenance, setMaintenance] = useState(null);
 
-  useEffect(() => {
-    let isMounted = true;
+  // In-App Download States
+  const [downloading, setDownloading] = useState(false);
+  const [progress, setProgress] = useState(0); // 0.0 to 1.0
+  const [downloadStats, setDownloadStats] = useState({ downloadedMB: '0.0', totalMB: '0.0' });
+  const [downloadedUri, setDownloadedUri] = useState(null);
+  const [installing, setInstalling] = useState(false);
+  const [downloadError, setDownloadError] = useState('');
 
-    const checkUpdates = async () => {
-      try {
-        const res = await api.getAppConfig();
-        if (!isMounted) return;
+  const checkUpdates = async (isManual = false) => {
+    try {
+      const res = await api.getAppConfig();
+      if (res && res.ok && res.config) {
+        const cfg = res.config;
 
-        if (res && res.ok && res.config) {
-          const cfg = res.config;
-
-          // Check maintenance mode
-          if (cfg.maintenance_mode) {
-            setMaintenance(cfg.maintenance_message || 'Serverda texnik ishlar olib borilmoqda');
-            return;
-          }
-
-          // Check version
-          const latest = cfg.latest_version;
-          if (latest && isNewerVersion(latest, CURRENT_APP_VERSION)) {
-            setUpdateInfo({
-              latestVersion: latest,
-              currentVersion: CURRENT_APP_VERSION,
-              updateUrl: cfg.update_url || 'https://darkmora.uz/uploads/DarkMora.apk',
-              forceUpdate: !!cfg.force_update,
-              changelog: [
-                'Jonli video fonli yangi zamonaviy Login sahifasi (5-uslub)',
-                'Shaxsiy galereyadan profil rasmini yuklash',
-                'Autentifikatsiya va navigatsiya xatoliklari tuzatildi',
-                'Ilova tezligi va barqarorligi oshirildi',
-              ],
-            });
-            setVisible(true);
-          }
+        if (cfg.maintenance_mode) {
+          setMaintenance(cfg.maintenance_message || 'Serverda texnik ishlar olib borilmoqda');
+          return;
         }
-      } catch (e) {
-        console.warn('App update check failed:', e);
-      }
-    };
 
-    checkUpdates();
+        const latest = cfg.latest_version;
+        if (latest && isNewerVersion(latest, CURRENT_APP_VERSION)) {
+          setUpdateInfo({
+            latestVersion: latest,
+            currentVersion: CURRENT_APP_VERSION,
+            updateUrl: cfg.update_url || 'https://darkmora.uz/uploads/DarkMora.apk?v=' + latest,
+            forceUpdate: !!cfg.force_update,
+            changelog: [
+              'Ilova ichida to\'g\'ridan-to\'g\'ri yuklab olish va o\'rnatish',
+              'Jonli video fonli yangi zamonaviy Login sahifasi (5-uslub)',
+              'Shaxsiy galereyadan profil rasmini yuklash',
+              'Autentifikatsiya va navigatsiya xatoliklari to\'liq tuzatildi',
+            ],
+          });
+          setVisible(true);
+        } else if (isManual) {
+          Alert.alert(
+            'Eng so\'nggi versiya',
+            `Sizda DarkMora ilovasining eng so'nggi v${CURRENT_APP_VERSION} versiyasi o'rnatilgan.`
+          );
+        }
+      }
+    } catch (e) {
+      if (isManual) {
+        Alert.alert('Xatolik', 'Yangilanishlarni tekshirishda serverga ulanib bo\'lmadi.');
+      }
+    }
+  };
+
+  useEffect(() => {
+    checkUpdates(false);
+
+    // Manual check listener from ProfileScreen
+    const sub = DeviceEventEmitter.addListener('CHECK_FOR_UPDATES', () => {
+      checkUpdates(true);
+    });
 
     return () => {
-      isMounted = false;
+      sub.remove();
     };
   }, []);
 
-  const handleUpdate = () => {
+  const handleStartDownload = async () => {
+    if (downloadedUri) {
+      await handleInstallApk(downloadedUri);
+      return;
+    }
+
+    setDownloading(true);
+    setDownloadError('');
+    setProgress(0);
+    setDownloadStats({ downloadedMB: '0.0', totalMB: '90.0' });
+
     const url = updateInfo?.updateUrl || 'https://darkmora.uz/uploads/DarkMora.apk';
-    Linking.openURL(url).catch((err) => {
-      console.warn('Could not open update URL:', err);
-    });
+    const targetFile = `${FileSystem.cacheDirectory}DarkMora_v${updateInfo?.latestVersion || 'new'}.apk`;
+
+    try {
+      const fileInfo = await FileSystem.getInfoAsync(targetFile);
+      if (fileInfo.exists) {
+        await FileSystem.deleteAsync(targetFile, { idempotent: true });
+      }
+
+      const downloadResumable = FileSystem.createDownloadResumable(
+        url,
+        targetFile,
+        {},
+        (downloadProgress) => {
+          const total = downloadProgress.totalBytesExpectedToWrite;
+          const written = downloadProgress.totalBytesWritten;
+          if (total > 0) {
+            const p = Math.min(1, Math.max(0, written / total));
+            setProgress(p);
+            setDownloadStats({
+              downloadedMB: (written / (1024 * 1024)).toFixed(1),
+              totalMB: (total / (1024 * 1024)).toFixed(1),
+            });
+          }
+        }
+      );
+
+      const result = await downloadResumable.downloadAsync();
+      if (result && result.uri) {
+        setDownloading(false);
+        setDownloadedUri(result.uri);
+        setProgress(1);
+
+        // Auto trigger native installer
+        await handleInstallApk(result.uri);
+      } else {
+        throw new Error('Fayl to\'liq yuklanmadi');
+      }
+    } catch (e) {
+      console.warn('In-app download error:', e);
+      setDownloading(false);
+      setDownloadError('Ilova ichida yuklab olishda nosozlik bo\'ldi. Brauzer orqali yuklab olishingiz mumkin.');
+    }
+  };
+
+  const handleInstallApk = async (fileUri) => {
+    setInstalling(true);
+    try {
+      if (Platform.OS === 'android') {
+        const contentUri = await FileSystem.getContentUriAsync(fileUri);
+        await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+          data: contentUri,
+          flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
+          type: 'application/vnd.android.package-archive',
+        });
+      } else {
+        Linking.openURL(updateInfo?.updateUrl || 'https://darkmora.uz/uploads/DarkMora.apk');
+      }
+    } catch (e) {
+      console.warn('Direct package install error:', e);
+      setDownloadError('O\'rnatuvchi oynani ochib bo\'lmadi. Iltimos brauzer orqali yuklab oling.');
+    } finally {
+      setInstalling(false);
+    }
+  };
+
+  const handleBrowserFallback = () => {
+    const url = updateInfo?.updateUrl || 'https://darkmora.uz/uploads/DarkMora.apk';
+    Linking.openURL(url).catch(() => {});
   };
 
   if (maintenance) {
@@ -105,11 +207,13 @@ export default function AppUpdateModal() {
 
   if (!visible || !updateInfo) return null;
 
+  const percentInt = Math.round(progress * 100);
+
   return (
     <Modal visible={visible} transparent animationType="slide">
       <View style={styles.overlay}>
         <View style={styles.modalCard}>
-          {!updateInfo.forceUpdate && (
+          {!updateInfo.forceUpdate && !downloading && (
             <TouchableOpacity
               style={styles.closeBtn}
               onPress={() => setVisible(false)}
@@ -120,7 +224,11 @@ export default function AppUpdateModal() {
           )}
 
           <View style={styles.iconWrap}>
-            <DownloadCloud size={32} color={colors.primaryGlow} />
+            {downloadedUri ? (
+              <CheckCircle2 size={34} color="#34d399" />
+            ) : (
+              <DownloadCloud size={32} color={colors.primaryGlow} />
+            )}
           </View>
 
           <View style={styles.badge}>
@@ -128,36 +236,89 @@ export default function AppUpdateModal() {
             <Text style={styles.badgeText}>YANGILANISH KELDI</Text>
           </View>
 
-          <Text style={styles.title}>Yangi versiya mavjud!</Text>
+          <Text style={styles.title}>
+            {downloadedUri ? 'Yuklab olindi!' : 'Yangi versiya mavjud!'}
+          </Text>
           <Text style={styles.versionSub}>
             v{updateInfo.latestVersion} (Sizda: v{updateInfo.currentVersion})
           </Text>
 
-          <Text style={styles.desc}>
-            Ilovaning yangi imkoniyatlaridan to'liq foydalanish uchun so'nggi versiyaga yangilang:
-          </Text>
+          {/* Changelog list (only when not downloading) */}
+          {!downloading && !downloadedUri && (
+            <View style={styles.changelogBox}>
+              {updateInfo.changelog.map((item, idx) => (
+                <View key={idx} style={styles.changeItem}>
+                  <Text style={styles.changeDot}>•</Text>
+                  <Text style={styles.changeText}>{item}</Text>
+                </View>
+              ))}
+            </View>
+          )}
 
-          {/* Changelog list */}
-          <View style={styles.changelogBox}>
-            {updateInfo.changelog.map((item, idx) => (
-              <View key={idx} style={styles.changeItem}>
-                <Text style={styles.changeDot}>•</Text>
-                <Text style={styles.changeText}>{item}</Text>
+          {/* Downloading Progress Bar View */}
+          {downloading && (
+            <View style={styles.progressContainer}>
+              <View style={styles.progressTopRow}>
+                <Text style={styles.progressLabel}>Ilova ichida yuklanmoqda...</Text>
+                <Text style={styles.progressPercent}>{percentInt}%</Text>
               </View>
-            ))}
-          </View>
 
-          {/* Update Action Button */}
-          <TouchableOpacity
-            style={styles.updateBtn}
-            onPress={handleUpdate}
-            activeOpacity={0.85}
-          >
-            <DownloadCloud size={18} color="#fff" />
-            <Text style={styles.updateBtnText}>Hozir yangilash (APK)</Text>
-          </TouchableOpacity>
+              <View style={styles.progressBarBg}>
+                <View style={[styles.progressBarFill, { width: `${percentInt}%` }]} />
+              </View>
 
-          {!updateInfo.forceUpdate && (
+              <View style={styles.progressBottomRow}>
+                <Text style={styles.progressBytes}>
+                  {downloadStats.downloadedMB} MB / {downloadStats.totalMB} MB
+                </Text>
+                <ActivityIndicator size="small" color={colors.primaryGlow} />
+              </View>
+            </View>
+          )}
+
+          {/* Error notice */}
+          {downloadError ? (
+            <View style={styles.errorBox}>
+              <Text style={styles.errorText}>{downloadError}</Text>
+              <TouchableOpacity
+                style={styles.fallbackBrowserBtn}
+                onPress={handleBrowserFallback}
+                activeOpacity={0.8}
+              >
+                <ExternalLink size={14} color={colors.primaryGlow} />
+                <Text style={styles.fallbackBrowserText}>Brauzer orqali yuklab olish</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
+          {/* Main Action Button */}
+          {!downloading && (
+            <TouchableOpacity
+              style={[
+                styles.updateBtn,
+                downloadedUri && styles.installBtn,
+              ]}
+              onPress={handleStartDownload}
+              activeOpacity={0.85}
+              disabled={installing}
+            >
+              {installing ? (
+                <ActivityIndicator color="#fff" />
+              ) : downloadedUri ? (
+                <>
+                  <CheckCircle2 size={18} color="#fff" />
+                  <Text style={styles.updateBtnText}>Hozir o'rnatish (Install)</Text>
+                </>
+              ) : (
+                <>
+                  <DownloadCloud size={18} color="#fff" />
+                  <Text style={styles.updateBtnText}>Ilova ichida yangilash</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+
+          {!updateInfo.forceUpdate && !downloading && (
             <TouchableOpacity
               style={styles.laterBtn}
               onPress={() => setVisible(false)}
@@ -175,7 +336,7 @@ export default function AppUpdateModal() {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.82)',
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 24,
@@ -245,13 +406,6 @@ const styles = StyleSheet.create({
     color: colors.textDim,
     fontWeight: '600',
     marginTop: 4,
-    marginBottom: 12,
-  },
-  desc: {
-    fontSize: 13,
-    color: colors.textMuted,
-    textAlign: 'center',
-    lineHeight: 18,
     marginBottom: 14,
   },
   changelogBox: {
@@ -281,6 +435,82 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
   },
+  progressContainer: {
+    width: '100%',
+    backgroundColor: 'rgba(10, 14, 24, 0.7)',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+    marginBottom: 16,
+  },
+  progressTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  progressLabel: {
+    color: '#e2e8f0',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  progressPercent: {
+    color: colors.primaryGlow,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  progressBarBg: {
+    width: '100%',
+    height: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 5,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: colors.primary,
+    borderRadius: 5,
+  },
+  progressBottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  progressBytes: {
+    color: colors.textDim,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  errorBox: {
+    width: '100%',
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    alignItems: 'center',
+    gap: 8,
+  },
+  errorText: {
+    color: '#fca5a5',
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+  fallbackBrowserBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 4,
+  },
+  fallbackBrowserText: {
+    color: colors.primaryGlow,
+    fontSize: 12,
+    fontWeight: '700',
+  },
   updateBtn: {
     width: '100%',
     height: 48,
@@ -295,6 +525,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 8,
     elevation: 4,
+  },
+  installBtn: {
+    backgroundColor: '#059669',
   },
   updateBtnText: {
     color: '#fff',

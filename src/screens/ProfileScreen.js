@@ -12,6 +12,7 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
+  DeviceEventEmitter,
 } from 'react-native';
 import {
   User,
@@ -144,34 +145,8 @@ export default function ProfileScreen({ navigation }) {
     Linking.openURL('https://darkmora.uz').catch(() => {});
   };
 
-  const handleCheckUpdate = async () => {
-    try {
-      const res = await api.getAppConfig();
-      if (res && res.ok && res.config) {
-        const latest = res.config.latest_version;
-        if (latest && isNewerVersion(latest, CURRENT_APP_VERSION)) {
-          Alert.alert(
-            '🚀 Yangi yangilanish!',
-            `DarkMora ilovasining yangi v${latest} versiyasi chiqdi!\n\n• Video fonli yangi login (5-uslub)\n• Galereyadan rasm yuklash\n• Navigatsiya va xatoliklar tuzatildi\n\nHozir yangilaysizmi?`,
-            [
-              { text: 'Keyinroq', style: 'cancel' },
-              {
-                text: 'Yuklab olish (APK)',
-                onPress: () => {
-                  Linking.openURL(res.config.update_url || 'https://darkmora.uz/uploads/DarkMora.apk').catch(() => {});
-                },
-              },
-            ]
-          );
-        } else {
-          Alert.alert('Yangilanish', `Sizda eng so'nggi versiya o'rnatilgan (v${CURRENT_APP_VERSION})`);
-        }
-      } else {
-        Alert.alert('Yangilanish', `Sizda eng so'nggi versiya o'rnatilgan (v${CURRENT_APP_VERSION})`);
-      }
-    } catch (e) {
-      Alert.alert('Xatolik', 'Serverdan yangilanishni tekshirib bo\'lmadi');
-    }
+  const handleCheckUpdate = () => {
+    DeviceEventEmitter.emit('CHECK_FOR_UPDATES');
   };
 
   const userPhotoUri = user?.photo_url ? toAbsoluteUrl(user.photo_url) : null;

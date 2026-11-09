@@ -2,7 +2,7 @@
   "expo": {
     "name": "DarkMora",
     "slug": "darkmora",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -22,13 +22,14 @@
         "backgroundColor": "#07080a"
       },
       "package": "uz.darkmora.app",
-      "versionCode": 2,
+      "versionCode": 3,
       "permissions": [
         "INTERNET",
         "ACCESS_NETWORK_STATE",
         "WAKE_LOCK",
         "READ_EXTERNAL_STORAGE",
-        "READ_MEDIA_IMAGES"
+        "READ_MEDIA_IMAGES",
+        "REQUEST_INSTALL_PACKAGES"
       ]
     },
     "web": {
