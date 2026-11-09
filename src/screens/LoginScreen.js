@@ -9,8 +9,13 @@ import {
   StatusBar,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
+  Image,
 } from 'react-native';
-import { ChevronLeft, Lock, User } from 'lucide-react-native';
+import { Video, ResizeMode } from 'expo-av';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
+import { ChevronLeft, Lock, User, Eye, EyeOff } from 'lucide-react-native';
 import { colors } from '../theme/colors';
 import { useAuth } from '../context/AuthContext';
 
@@ -18,8 +23,10 @@ export default function LoginScreen({ navigation }) {
   const { login } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [activeInput, setActiveInput] = useState(null); // 'user' | 'pass' | null
 
   const handleLogin = async () => {
     if (!username.trim() || !password.trim()) {
@@ -31,7 +38,13 @@ export default function LoginScreen({ navigation }) {
     try {
       const res = await login(username.trim(), password);
       if (res && res.ok) {
-        navigation.goBack();
+        // Avtorizatsiya muvaffaqiyatli bo'lsa, stekdagi barcha auth sahifalarini tozalab
+        // asosiy sahifaga qaytamiz (Registerga o'tib qolish xatosini oldini oladi)
+        if (navigation.canGoBack()) {
+          navigation.popToTop();
+        } else {
+          navigation.navigate('Main');
+        }
       } else {
         setError(res?.error || 'Login yoki parol noto\'g\'ri');
       }
@@ -43,135 +56,315 @@ export default function LoginScreen({ navigation }) {
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={styles.container}
-    >
-      <StatusBar barStyle="light-content" backgroundColor={colors.bg} />
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-        <ChevronLeft size={22} color="#fff" />
-      </TouchableOpacity>
+      {/* 5-USLUB: CINEMATIC LIVE ANIME VIDEO BACKGROUND */}
+      <Video
+        source={require('../../assets/login_bg.mp4')}
+        style={StyleSheet.absoluteFillObject}
+        resizeMode={ResizeMode.COVER}
+        shouldPlay
+        isLooping
+        isMuted
+      />
 
-      <View style={styles.content}>
-        <Text style={styles.title}>Xush kelibsiz!</Text>
-        <Text style={styles.subtitle}>DarkMora hisobingizga kiring</Text>
+      {/* Dark Vignette Gradient Overlay */}
+      <LinearGradient
+        colors={[
+          'rgba(7, 8, 12, 0.45)',
+          'rgba(7, 8, 12, 0.70)',
+          'rgba(7, 8, 12, 0.94)',
+        ]}
+        locations={[0, 0.5, 1]}
+        style={StyleSheet.absoluteFillObject}
+      />
 
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-        <View style={styles.inputBox}>
-          <User size={18} color={colors.textDim} />
-          <TextInput
-            placeholder="Foydalanuvchi nomi yoki email"
-            placeholderTextColor={colors.textDim}
-            style={styles.input}
-            value={username}
-            onChangeText={setUsername}
-            autoCapitalize="none"
-          />
-        </View>
-
-        <View style={styles.inputBox}>
-          <Lock size={18} color={colors.textDim} />
-          <TextInput
-            placeholder="Parol"
-            placeholderTextColor={colors.textDim}
-            style={styles.input}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
-        </View>
-
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.keyboardWrap}
+      >
         <TouchableOpacity
-          style={styles.forgotPassBtn}
-          onPress={() => navigation.navigate('ForgotPassword')}
+          style={styles.backBtn}
+          onPress={() => {
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              navigation.navigate('Main');
+            }
+          }}
+          activeOpacity={0.8}
         >
-          <Text style={styles.forgotPassText}>Parolni unutdingizmi?</Text>
+          <ChevronLeft size={22} color="#fff" />
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.submitBtn}
-          activeOpacity={0.85}
-          onPress={handleLogin}
-          disabled={loading}
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.submitBtnText}>Kirish</Text>
-          )}
-        </TouchableOpacity>
+          {/* Top Anime Badge */}
+          <View style={styles.badgeContainer}>
+            <View style={styles.animeBadge}>
+              <Text style={styles.animeBadgeText}>DARKMORA • ANIME HUB</Text>
+            </View>
+          </View>
 
-        <View style={styles.bottomLinkRow}>
-          <Text style={styles.bottomLinkText}>Hisobingiz yo'qmi? </Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-            <Text style={styles.linkHighlight}>Ro'yxatdan o'tish</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </KeyboardAvoidingView>
+          {/* Frosted Glassmorphism Card */}
+          <BlurView
+            intensity={Platform.OS === 'ios' ? 45 : 30}
+            tint="dark"
+            style={styles.glassCard}
+          >
+            {/* Logo */}
+            <View style={styles.logoWrap}>
+              <View style={styles.logoGlowRing}>
+                <Image
+                  source={require('../../assets/icon.png')}
+                  style={styles.logoImg}
+                />
+              </View>
+            </View>
+
+            <Text style={styles.title}>Xush kelibsiz!</Text>
+            <Text style={styles.subtitle}>DarkMora hisobingizga kiring</Text>
+
+            {error ? (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            ) : null}
+
+            {/* Input 1: Username / Email */}
+            <View
+              style={[
+                styles.inputBox,
+                activeInput === 'user' && styles.inputBoxActive,
+              ]}
+            >
+              <User
+                size={18}
+                color={activeInput === 'user' ? colors.primaryGlow : colors.textDim}
+              />
+              <TextInput
+                placeholder="Foydalanuvchi nomi yoki email"
+                placeholderTextColor={colors.textDim}
+                style={styles.input}
+                value={username}
+                onChangeText={setUsername}
+                autoCapitalize="none"
+                onFocus={() => setActiveInput('user')}
+                onBlur={() => setActiveInput(null)}
+              />
+            </View>
+
+            {/* Input 2: Password */}
+            <View
+              style={[
+                styles.inputBox,
+                activeInput === 'pass' && styles.inputBoxActive,
+              ]}
+            >
+              <Lock
+                size={18}
+                color={activeInput === 'pass' ? colors.primaryGlow : colors.textDim}
+              />
+              <TextInput
+                placeholder="Parol"
+                placeholderTextColor={colors.textDim}
+                style={styles.input}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                onFocus={() => setActiveInput('pass')}
+                onBlur={() => setActiveInput(null)}
+              />
+              <TouchableOpacity
+                onPress={() => setShowPassword((prev) => !prev)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                {showPassword ? (
+                  <EyeOff size={18} color={colors.textDim} />
+                ) : (
+                  <Eye size={18} color={colors.textDim} />
+                )}
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={styles.forgotPassBtn}
+              onPress={() => navigation.navigate('ForgotPassword')}
+            >
+              <Text style={styles.forgotPassText}>Parolni unutdingizmi?</Text>
+            </TouchableOpacity>
+
+            {/* Submit Button with Gradient */}
+            <TouchableOpacity
+              style={styles.submitBtnWrap}
+              activeOpacity={0.85}
+              onPress={handleLogin}
+              disabled={loading}
+            >
+              <LinearGradient
+                colors={['#1d68f6', '#2563eb']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.submitBtn}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.submitBtnText}>Kirish</Text>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+
+            {/* Bottom Register Switch - using replace to avoid stack piling */}
+            <View style={styles.bottomLinkRow}>
+              <Text style={styles.bottomLinkText}>Hisobingiz yo'qmi? </Text>
+              <TouchableOpacity onPress={() => navigation.replace('Register')}>
+                <Text style={styles.linkHighlight}>Ro'yxatdan o'tish</Text>
+              </TouchableOpacity>
+            </View>
+          </BlurView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.bg,
-    paddingHorizontal: 20,
+    backgroundColor: '#07080a',
+  },
+  keyboardWrap: {
+    flex: 1,
   },
   backBtn: {
-    marginTop: StatusBar.currentHeight ? StatusBar.currentHeight + 12 : 50,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.bgCard,
+    position: 'absolute',
+    top: StatusBar.currentHeight ? StatusBar.currentHeight + 12 : 48,
+    left: 20,
+    zIndex: 10,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(15, 20, 32, 0.75)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: colors.cardBorder,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
   },
-  content: {
-    flex: 1,
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
-    paddingBottom: 60,
+    paddingHorizontal: 20,
+    paddingTop: StatusBar.currentHeight ? StatusBar.currentHeight + 60 : 100,
+    paddingBottom: 40,
+  },
+  badgeContainer: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  animeBadge: {
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.4)',
+  },
+  animeBadgeText: {
+    color: colors.primaryGlow,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+  },
+  glassCard: {
+    backgroundColor: 'rgba(12, 17, 29, 0.78)',
+    borderRadius: 24,
+    padding: 24,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.14)',
+    overflow: 'hidden',
+    shadowColor: '#1d68f6',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  logoWrap: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  logoGlowRing: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    padding: 3,
+    borderWidth: 2,
+    borderColor: 'rgba(56, 189, 248, 0.65)',
+    backgroundColor: 'rgba(29, 104, 246, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logoImg: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
   },
   title: {
     fontSize: 26,
     fontWeight: '800',
-    color: '#fff',
+    color: '#ffffff',
+    textAlign: 'center',
   },
   subtitle: {
-    fontSize: 14,
-    color: colors.textDim,
+    fontSize: 13,
+    color: colors.textMuted,
+    textAlign: 'center',
     marginTop: 6,
-    marginBottom: 24,
+    marginBottom: 20,
+  },
+  errorBox: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.4)',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 14,
   },
   errorText: {
-    color: colors.error,
-    fontSize: 13,
-    marginBottom: 14,
+    color: '#fca5a5',
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   inputBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.bgCard,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
+    backgroundColor: 'rgba(5, 8, 16, 0.65)',
+    borderWidth: 1.2,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
     borderRadius: 14,
     paddingHorizontal: 14,
-    height: 50,
+    height: 52,
     marginBottom: 14,
     gap: 10,
   },
+  inputBoxActive: {
+    borderColor: colors.primaryGlow,
+    backgroundColor: 'rgba(10, 18, 35, 0.85)',
+  },
   input: {
     flex: 1,
-    color: '#fff',
+    color: '#ffffff',
     fontSize: 14,
   },
   forgotPassBtn: {
     alignSelf: 'flex-end',
-    marginBottom: 16,
+    marginBottom: 18,
     paddingVertical: 4,
   },
   forgotPassText: {
@@ -179,18 +372,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  submitBtn: {
-    backgroundColor: colors.primary,
-    height: 50,
+  submitBtnWrap: {
     borderRadius: 14,
+    overflow: 'hidden',
+    shadowColor: '#1d68f6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  submitBtn: {
+    height: 52,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 8,
   },
   submitBtnText: {
-    color: '#fff',
+    color: '#ffffff',
     fontSize: 15,
     fontWeight: '700',
+    letterSpacing: 0.5,
   },
   bottomLinkRow: {
     flexDirection: 'row',
@@ -198,7 +398,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   bottomLinkText: {
-    color: colors.textDim,
+    color: colors.textMuted,
     fontSize: 13,
   },
   linkHighlight: {

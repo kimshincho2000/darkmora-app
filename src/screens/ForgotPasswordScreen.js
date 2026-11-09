@@ -88,7 +88,7 @@ export default function ForgotPasswordScreen({ navigation }) {
       if (res && res.ok) {
         setSuccess('Parolingiz muvaffaqiyatli yangilandi!');
         setTimeout(() => {
-          navigation.navigate('Login');
+          navigation.replace('Login');
         }, 1500);
       } else {
         setError(res?.error || 'Parolni yangilashda xatolik');
@@ -265,7 +265,7 @@ export default function ForgotPasswordScreen({ navigation }) {
 
         <View style={styles.bottomLinkRow}>
           <Text style={styles.bottomLinkText}>Parolingiz esingizdami? </Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+          <TouchableOpacity onPress={() => navigation.replace('Login')}>
             <Text style={styles.linkHighlight}>Kirish</Text>
           </TouchableOpacity>
         </View>

@@ -75,20 +75,22 @@ export default function ProfileScreen({ navigation }) {
   };
 
   const pickImageFromGallery = async () => {
+    setEditError('');
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        setEditError('Galereyadan rasm tanlash uchun ruxsat berilmadi');
+        setEditError('Galereyadan rasm tanlash uchun ruxsat berilmadi. Sozlamalardan ruxsat bering.');
         return;
       }
 
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
+      const options = {
+        mediaTypes: ImagePicker.MediaTypeOptions ? ImagePicker.MediaTypeOptions.Images : ['images'],
+        allowsEditing: false, // Android crop intent nosozliklarining oldini olish uchun
+        quality: 0.7,
         base64: true,
-      });
+      };
+
+      const result = await ImagePicker.launchImageLibraryAsync(options);
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
@@ -98,7 +100,8 @@ export default function ProfileScreen({ navigation }) {
         setCustomAvatarUrl('');
       }
     } catch (e) {
-      setEditError('Galereyadan rasm yuklashda xatolik yuz berdi');
+      console.warn('Gallery pick error:', e);
+      setEditError(`Galereyadan tanlashda xatolik: ${e?.message || 'Qurilma rad etdi'}`);
     }
   };
 

@@ -400,7 +400,7 @@ export default function RegisterScreen({ navigation }) {
 
         <View style={styles.bottomLinkRow}>
           <Text style={styles.bottomLinkText}>Akkauntingiz bormi? </Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+          <TouchableOpacity onPress={() => navigation.replace('Login')}>
             <Text style={styles.linkHighlight}>Kirish</Text>
           </TouchableOpacity>
         </View>
