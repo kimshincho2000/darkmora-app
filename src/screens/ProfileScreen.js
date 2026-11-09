@@ -26,7 +26,9 @@ import {
   Check,
   Lock,
   Image as ImageIcon,
+  UploadCloud,
 } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { colors } from '../theme/colors';
 import { useAuth } from '../context/AuthContext';
 import { toAbsoluteUrl } from '../api/client';
@@ -52,6 +54,8 @@ export default function ProfileScreen({ navigation }) {
   const [displayName, setDisplayName] = useState('');
   const [selectedAvatarUrl, setSelectedAvatarUrl] = useState('');
   const [customAvatarUrl, setCustomAvatarUrl] = useState('');
+  const [pickedImageBase64, setPickedImageBase64] = useState('');
+  const [pickedImageUri, setPickedImageUri] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState('');
@@ -62,10 +66,40 @@ export default function ProfileScreen({ navigation }) {
     setDisplayName(user.display_name || user.username || '');
     setSelectedAvatarUrl(user.photo_url ? toAbsoluteUrl(user.photo_url) : '');
     setCustomAvatarUrl('');
+    setPickedImageBase64('');
+    setPickedImageUri('');
     setNewPassword('');
     setEditError('');
     setEditSuccess('');
     setEditModalVisible(true);
+  };
+
+  const pickImageFromGallery = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        setEditError('Galereyadan rasm tanlash uchun ruxsat berilmadi');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        setPickedImageUri(asset.uri);
+        setPickedImageBase64(asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : '');
+        setSelectedAvatarUrl('');
+        setCustomAvatarUrl('');
+      }
+    } catch (e) {
+      setEditError('Galereyadan rasm yuklashda xatolik yuz berdi');
+    }
   };
 
   const handleSaveProfile = async () => {
@@ -76,7 +110,8 @@ export default function ProfileScreen({ navigation }) {
       const finalAvatar = customAvatarUrl.trim() || selectedAvatarUrl || (user?.photo_url ? toAbsoluteUrl(user.photo_url) : '');
       const res = await updateProfile({
         displayName: displayName.trim(),
-        photoUrl: finalAvatar,
+        photoUrl: pickedImageBase64 ? undefined : finalAvatar,
+        photoBase64: pickedImageBase64 || undefined,
         password: newPassword ? newPassword.trim() : undefined,
       });
 
@@ -250,7 +285,12 @@ export default function ProfileScreen({ navigation }) {
               {/* Avatar Preview */}
               <View style={styles.avatarPreviewWrap}>
                 <View style={styles.modalAvatarCircle}>
-                  {customAvatarUrl.trim() || selectedAvatarUrl ? (
+                  {pickedImageUri ? (
+                    <Image
+                      source={{ uri: pickedImageUri }}
+                      style={styles.modalAvatarImg}
+                    />
+                  ) : customAvatarUrl.trim() || selectedAvatarUrl ? (
                     <Image
                       source={{ uri: toAbsoluteUrl(customAvatarUrl.trim() || selectedAvatarUrl) }}
                       style={styles.modalAvatarImg}
@@ -259,8 +299,20 @@ export default function ProfileScreen({ navigation }) {
                     <User size={40} color={colors.primaryGlow} />
                   )}
                 </View>
-                <Text style={styles.avatarPreviewLabel}>Profil rasmini tanlang</Text>
+                <Text style={styles.avatarPreviewLabel}>Profil rasmini o'zgartiring</Text>
+
+                {/* Gallery Picker Button */}
+                <TouchableOpacity
+                  style={styles.galleryPickBtn}
+                  onPress={pickImageFromGallery}
+                  activeOpacity={0.85}
+                >
+                  <UploadCloud size={18} color="#fff" />
+                  <Text style={styles.galleryPickBtnText}>📁 Shaxsiy galereyadan rasm tanlash</Text>
+                </TouchableOpacity>
               </View>
+
+              <Text style={styles.inputLabel}>Yoki anime qahramonlari avatari:</Text>
 
               {/* Avatar Presets Carousel */}
               <ScrollView
@@ -269,7 +321,7 @@ export default function ProfileScreen({ navigation }) {
                 contentContainerStyle={styles.presetsList}
               >
                 {AVATAR_PRESETS.map((preset) => {
-                  const isSelected = selectedAvatarUrl === preset.url && !customAvatarUrl;
+                  const isSelected = selectedAvatarUrl === preset.url && !customAvatarUrl && !pickedImageUri;
                   return (
                     <TouchableOpacity
                       key={preset.name}
@@ -277,6 +329,8 @@ export default function ProfileScreen({ navigation }) {
                       onPress={() => {
                         setSelectedAvatarUrl(preset.url);
                         setCustomAvatarUrl('');
+                        setPickedImageUri('');
+                        setPickedImageBase64('');
                       }}
                     >
                       <Image source={{ uri: preset.url }} style={styles.presetImg} />
@@ -587,6 +641,24 @@ const styles = StyleSheet.create({
     color: colors.textDim,
     fontSize: 12,
     fontWeight: '600',
+    marginBottom: 10,
+  },
+  galleryPickBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(29, 104, 246, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(29, 104, 246, 0.45)',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  galleryPickBtnText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
   },
   presetsList: {
     flexDirection: 'row',
