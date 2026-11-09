@@ -9,6 +9,7 @@ import {
   StatusBar,
   ScrollView,
   BackHandler,
+  Platform,
 } from 'react-native';
 import { Video, ResizeMode } from 'expo-av';
 import * as ScreenOrientation from 'expo-screen-orientation';
@@ -22,7 +23,10 @@ import {
   ChevronLeft,
   SkipForward,
   SkipBack,
-  Sliders,
+  FastForward,
+  X,
+  Gauge,
+  Scaling,
   ArrowUpDown,
   LayoutGrid,
   LayoutList,
@@ -30,7 +34,7 @@ import {
 import { colors } from '../theme/colors';
 import { toAbsoluteUrl } from '../api/client';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const formatTime = (millis) => {
   if (!millis || isNaN(millis)) return '00:00';
@@ -39,6 +43,8 @@ const formatTime = (millis) => {
   const seconds = totalSeconds % 60;
   return `${minutes < 10 ? '0' : ''}${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
 };
+
+const SPEED_OPTIONS = [1.0, 1.25, 1.5, 2.0];
 
 export default function PlayerScreen({ navigation, route }) {
   const { anime, episodes = [], episodeNumber = 1 } = route.params || {};
@@ -54,6 +60,16 @@ export default function PlayerScreen({ navigation, route }) {
   const [durationMillis, setDurationMillis] = useState(0);
   const [showControls, setShowControls] = useState(true);
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
+  const [resizeMode, setResizeMode] = useState(ResizeMode.CONTAIN);
+
+  // Skip Opening & Next prompt states
+  const [dismissNextPrompt, setDismissNextPrompt] = useState(false);
+  const [opSkipped, setOpSkipped] = useState(false);
+
+  // Timeline layout width for touch scrubbing
+  const [progressBarWidth, setProgressBarWidth] = useState(0);
+
+  // Sorting and range tabs
   const [sortOrder, setSortOrder] = useState('asc'); // 'asc' | 'desc'
   const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
   const [activeRangeIndex, setActiveRangeIndex] = useState(0);
@@ -99,7 +115,7 @@ export default function PlayerScreen({ navigation, route }) {
     return sortedEpisodes.slice(currentRange.startIndex, currentRange.endIndex);
   }, [sortedEpisodes, episodeRanges, activeRangeIndex]);
 
-  // Find active episode
+  // Find active episode in raw episodes
   const currentEpIndex = episodes.findIndex(
     (e) => parseInt(e.qism || e.episode_number, 10) === currentEpNum
   );
@@ -120,6 +136,7 @@ export default function PlayerScreen({ navigation, route }) {
       await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE_RIGHT);
       setIsFullscreen(true);
     }
+    resetControlsTimeout();
   };
 
   // Reset orientation on back
@@ -147,7 +164,7 @@ export default function PlayerScreen({ navigation, route }) {
       if (isPlaying) {
         setShowControls(false);
       }
-    }, 4000);
+    }, 4500);
   };
 
   const handlePlayPause = async () => {
@@ -167,11 +184,71 @@ export default function PlayerScreen({ navigation, route }) {
     resetControlsTimeout();
   };
 
+  // Tap on progress bar to seek
+  const handleTimelinePress = async (e) => {
+    if (!videoRef.current || !durationMillis || progressBarWidth <= 0) return;
+    const { locationX } = e.nativeEvent;
+    const ratio = Math.max(0, Math.min(1, locationX / progressBarWidth));
+    const newPos = Math.round(ratio * durationMillis);
+    await videoRef.current.setPositionAsync(newPos);
+    setPositionMillis(newPos);
+    resetControlsTimeout();
+  };
+
   const changeEpisode = (num) => {
     setCurrentEpNum(num);
     setPositionMillis(0);
     setIsBuffering(true);
+    setDismissNextPrompt(false);
+    setOpSkipped(false);
+    resetControlsTimeout();
   };
+
+  // Skip Opening (+85s)
+  const handleSkipOpening = async () => {
+    if (!videoRef.current || !durationMillis) return;
+    const opEnd = currentEp?.op_end ? currentEp.op_end * 1000 : null;
+    const targetPos = opEnd ? opEnd + 500 : Math.min(durationMillis, positionMillis + 85 * 1000);
+    await videoRef.current.setPositionAsync(targetPos);
+    setPositionMillis(targetPos);
+    setOpSkipped(true);
+    resetControlsTimeout();
+  };
+
+  // Speed Toggle
+  const handleToggleSpeed = async () => {
+    const curIdx = SPEED_OPTIONS.indexOf(playbackSpeed);
+    const nextSpeed = SPEED_OPTIONS[(curIdx + 1) % SPEED_OPTIONS.length];
+    setPlaybackSpeed(nextSpeed);
+    if (videoRef.current) {
+      await videoRef.current.setRateAsync(nextSpeed, true);
+    }
+    resetControlsTimeout();
+  };
+
+  // Resize Mode Toggle (Contain vs Cover)
+  const handleToggleResize = () => {
+    setResizeMode((prev) =>
+      prev === ResizeMode.CONTAIN ? ResizeMode.COVER : ResizeMode.CONTAIN
+    );
+    resetControlsTimeout();
+  };
+
+  // Calculations for Opening and Next Prompt
+  const remainingSec = durationMillis > 0 ? (durationMillis - positionMillis) / 1000 : null;
+  const showNextPrompt =
+    Boolean(nextEp) &&
+    remainingSec !== null &&
+    remainingSec <= 120 &&
+    remainingSec > 4 &&
+    !dismissNextPrompt;
+
+  // Opening is active in first 3.5 minutes (00:05 to 03:30)
+  const showOpSkip =
+    !opSkipped &&
+    positionMillis >= 5000 &&
+    positionMillis <= 210000 &&
+    durationMillis > 240000;
 
   return (
     <View style={[styles.container, isFullscreen && styles.fullscreenContainer]}>
@@ -187,7 +264,7 @@ export default function PlayerScreen({ navigation, route }) {
           ref={videoRef}
           source={{ uri: videoUrl }}
           style={styles.nativeVideo}
-          resizeMode={ResizeMode.CONTAIN}
+          resizeMode={resizeMode}
           shouldPlay={isPlaying}
           onPlaybackStatusUpdate={(status) => {
             if (!status.isLoaded) {
@@ -198,6 +275,11 @@ export default function PlayerScreen({ navigation, route }) {
             setIsPlaying(status.isPlaying);
             setPositionMillis(status.positionMillis || 0);
             setDurationMillis(status.durationMillis || 0);
+
+            // Auto-next when video completes
+            if (status.didJustFinish && nextEp) {
+              changeEpisode(parseInt(nextEp.qism || nextEp.episode_number, 10));
+            }
           }}
         />
 
@@ -208,10 +290,51 @@ export default function PlayerScreen({ navigation, route }) {
           </View>
         )}
 
+        {/* ================= FLOATING BUTTONS (ALWAYS VISIBLE OR WITH CONTROLS) ================= */}
+
+        {/* 1. SKIP OPENING BUTTON (+85s) */}
+        {showOpSkip && (
+          <View style={[styles.floatingSkipOpWrap, isFullscreen && styles.floatingSkipOpWrapFullscreen]}>
+            <TouchableOpacity
+              style={styles.skipOpBtn}
+              activeOpacity={0.85}
+              onPress={handleSkipOpening}
+            >
+              <FastForward size={14} color="#fff" />
+              <Text style={styles.skipOpText}>Openingni o'tkazish (+85s)</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* 2. NEXT EPISODE PROMPT (LAST 2 MINUTES) */}
+        {showNextPrompt && (
+          <View style={[styles.floatingNextWrap, isFullscreen && styles.floatingNextWrapFullscreen]}>
+            <View style={styles.nextPromptCard}>
+              <TouchableOpacity
+                style={styles.nextPromptBtn}
+                activeOpacity={0.85}
+                onPress={() => changeEpisode(parseInt(nextEp.qism || nextEp.episode_number, 10))}
+              >
+                <SkipForward size={15} color="#fff" />
+                <Text style={styles.nextPromptText}>
+                  Keyingi qism ({nextEp.qism || nextEp.episode_number}-qism)
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.nextPromptClose}
+                onPress={() => setDismissNextPrompt(true)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <X size={14} color="#94a3b8" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* ================= TRANSPARENT CONTROLS OVERLAY ================= */}
         {showControls && (
-          <View style={styles.controlsOverlay}>
-            {/* Top Bar: Back & Title */}
+          <View style={[styles.controlsOverlay, isFullscreen && styles.controlsOverlayFullscreen]}>
+            {/* Top Bar: Back, Title, Speed, Resize */}
             <View style={styles.topControlBar}>
               <TouchableOpacity
                 style={styles.controlIconBtn}
@@ -222,7 +345,8 @@ export default function PlayerScreen({ navigation, route }) {
               >
                 <ChevronLeft size={22} color="#fff" />
               </TouchableOpacity>
-              <View style={{ flex: 1, marginLeft: 8 }}>
+
+              <View style={{ flex: 1, marginLeft: 10 }}>
                 <Text style={styles.overlayAnimeTitle} numberOfLines={1}>
                   {anime?.title || anime?.nom}
                 </Text>
@@ -230,18 +354,40 @@ export default function PlayerScreen({ navigation, route }) {
                   {currentEpNum}-qism
                 </Text>
               </View>
+
+              {/* Action Buttons: Speed & Aspect Ratio */}
+              <View style={styles.topRightControls}>
+                <TouchableOpacity
+                  style={styles.pillControlBtn}
+                  onPress={handleToggleSpeed}
+                  activeOpacity={0.8}
+                >
+                  <Gauge size={13} color={colors.primaryGlow} />
+                  <Text style={styles.pillControlText}>{playbackSpeed}x</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.pillControlBtn}
+                  onPress={handleToggleResize}
+                  activeOpacity={0.8}
+                >
+                  <Scaling size={13} color={colors.primaryGlow} />
+                  <Text style={styles.pillControlText}>
+                    {resizeMode === ResizeMode.CONTAIN ? 'Moslash' : 'To\'ldirish'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* Middle: Prev, Rewind 10s, Play/Pause, Forward 10s, Next */}
             <View style={styles.middleControlBar}>
-              {prevEp && (
-                <TouchableOpacity
-                  style={styles.controlIconBtn}
-                  onPress={() => changeEpisode(parseInt(prevEp.qism || prevEp.episode_number, 10))}
-                >
-                  <SkipBack size={22} color="#fff" />
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity
+                style={[styles.controlIconBtn, !prevEp && styles.controlIconDisabled]}
+                disabled={!prevEp}
+                onPress={() => prevEp && changeEpisode(parseInt(prevEp.qism || prevEp.episode_number, 10))}
+              >
+                <SkipBack size={22} color="#fff" />
+              </TouchableOpacity>
 
               <TouchableOpacity style={styles.controlIconBtn} onPress={() => handleSeek(-10)}>
                 <RotateCcw size={24} color="#fff" />
@@ -265,31 +411,47 @@ export default function PlayerScreen({ navigation, route }) {
                 <Text style={styles.seekBadgeText}>10</Text>
               </TouchableOpacity>
 
-              {nextEp && (
-                <TouchableOpacity
-                  style={styles.controlIconBtn}
-                  onPress={() => changeEpisode(parseInt(nextEp.qism || nextEp.episode_number, 10))}
-                >
-                  <SkipForward size={22} color="#fff" />
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity
+                style={[styles.controlIconBtn, !nextEp && styles.controlIconDisabled]}
+                disabled={!nextEp}
+                onPress={() => nextEp && changeEpisode(parseInt(nextEp.qism || nextEp.episode_number, 10))}
+              >
+                <SkipForward size={22} color="#fff" />
+              </TouchableOpacity>
             </View>
 
             {/* Bottom Bar: Timeline, Times, Fullscreen */}
             <View style={styles.bottomControlBar}>
               <Text style={styles.timeText}>{formatTime(positionMillis)}</Text>
 
-              {/* Progress bar */}
-              <View style={styles.progressBarBg}>
-                <View
-                  style={[
-                    styles.progressBarFill,
-                    {
-                      width: `${durationMillis > 0 ? (positionMillis / durationMillis) * 100 : 0}%`,
-                    },
-                  ]}
-                />
-              </View>
+              {/* Interactive Scrubbable Progress Bar */}
+              <TouchableOpacity
+                style={styles.progressBarTouchArea}
+                activeOpacity={1}
+                onPress={handleTimelinePress}
+                onLayout={(e) => setProgressBarWidth(e.nativeEvent.layout.width)}
+              >
+                <View style={styles.progressBarBg}>
+                  <View
+                    style={[
+                      styles.progressBarFill,
+                      {
+                        width: `${durationMillis > 0 ? (positionMillis / durationMillis) * 100 : 0}%`,
+                      },
+                    ]}
+                  />
+                  {durationMillis > 0 && (
+                    <View
+                      style={[
+                        styles.progressThumb,
+                        {
+                          left: `${Math.min(98, Math.max(0, (positionMillis / durationMillis) * 100))}%`,
+                        },
+                      ]}
+                    />
+                  )}
+                </View>
+              </TouchableOpacity>
 
               <Text style={styles.timeText}>{formatTime(durationMillis)}</Text>
 
@@ -466,19 +628,50 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   centerOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 10,
   },
   controlsOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
     justifyContent: 'space-between',
-    padding: 12,
+    padding: 14,
+    zIndex: 20,
+  },
+  controlsOverlayFullscreen: {
+    paddingHorizontal: Platform.OS === 'android' ? 36 : 24,
+    paddingVertical: 18,
   },
   topControlBar: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  topRightControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pillControlBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  pillControlText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
   },
   overlayAnimeTitle: {
     color: '#fff',
@@ -497,12 +690,15 @@ const styles = StyleSheet.create({
     gap: 22,
   },
   controlIconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  controlIconDisabled: {
+    opacity: 0.3,
   },
   seekBadgeText: {
     position: 'absolute',
@@ -511,9 +707,9 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   playPauseBtn: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
@@ -533,17 +729,116 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
   },
-  progressBarBg: {
+  progressBarTouchArea: {
     flex: 1,
-    height: 4,
+    height: 28,
+    justifyContent: 'center',
+  },
+  progressBarBg: {
+    width: '100%',
+    height: 5,
     backgroundColor: 'rgba(255, 255, 255, 0.25)',
-    borderRadius: 2,
-    overflow: 'hidden',
+    borderRadius: 3,
+    position: 'relative',
   },
   progressBarFill: {
     height: '100%',
     backgroundColor: colors.primaryGlow,
+    borderRadius: 3,
   },
+  progressThumb: {
+    position: 'absolute',
+    top: -4,
+    width: 13,
+    height: 13,
+    borderRadius: 6.5,
+    backgroundColor: '#fff',
+    marginLeft: -6.5,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+
+  // Floating Buttons
+  floatingSkipOpWrap: {
+    position: 'absolute',
+    bottom: 56,
+    right: 16,
+    zIndex: 25,
+  },
+  floatingSkipOpWrapFullscreen: {
+    bottom: 64,
+    right: Platform.OS === 'android' ? 36 : 24,
+  },
+  skipOpBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(6, 182, 212, 0.95)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+    shadowColor: '#06b6d4',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.45,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  skipOpText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  floatingNextWrap: {
+    position: 'absolute',
+    bottom: 56,
+    right: 16,
+    zIndex: 25,
+  },
+  floatingNextWrapFullscreen: {
+    bottom: 64,
+    right: Platform.OS === 'android' ? 36 : 24,
+  },
+  nextPromptCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.95)',
+    borderRadius: 14,
+    borderWidth: 1.2,
+    borderColor: 'rgba(56, 189, 248, 0.4)',
+    overflow: 'hidden',
+    shadowColor: '#1d68f6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.45,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  nextPromptBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  nextPromptText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  nextPromptClose: {
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // Non-fullscreen scroll info
   scrollInfo: {
     flex: 1,
     padding: 16,
