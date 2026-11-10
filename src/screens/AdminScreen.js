@@ -46,8 +46,19 @@ import { useAuth } from '../context/AuthContext';
 import { api, toAbsoluteUrl } from '../api/client';
 
 export default function AdminScreen({ navigation }) {
-  const { user, logout } = useAuth();
+  const { user, isAdmin, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard'); // dashboard | animes | episodes | requests | settings
+
+  useEffect(() => {
+    if (!isAdmin) {
+      Alert.alert('Ruxsat cheklangan', 'Admin panel faqat administratorlar uchun mo\'ljallangan.');
+      if (navigation.canGoBack()) {
+        navigation.goBack();
+      } else {
+        navigation.replace('Main');
+      }
+    }
+  }, [isAdmin]);
 
   // Dashboard state
   const [stats, setStats] = useState(null);

@@ -75,6 +75,8 @@ export const api = {
   },
 
   login: async (username, password) => {
+    // Har qanday yangi kirishda eski admin tokenini tozalash (xavfsizlik)
+    await AsyncStorage.removeItem('darkmora_admin_token');
     const res = await apiRequest('/api?action=login', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
@@ -86,6 +88,8 @@ export const api = {
   },
 
   register: async (username, email, password) => {
+    // Yangi ro'yxatdan o'tishda admin tokenini tozalash
+    await AsyncStorage.removeItem('darkmora_admin_token');
     const res = await apiRequest('/api?action=register', {
       method: 'POST',
       body: JSON.stringify({ username, email, password }),

@@ -71,10 +71,14 @@ export const AuthProvider = ({ children }) => {
   };
 
   const isAdmin = Boolean(
-    user?.is_admin ||
-    user?.is_owner ||
-    user?.role === 'owner' ||
-    user?.username === 'fors'
+    user &&
+    (user.is_admin === true || user.is_owner === true || user.role === 'owner') &&
+    (
+      user.username?.toLowerCase() === 'fors' ||
+      user.email?.toLowerCase() === 'winpubgm8@gmail.com' ||
+      String(user.db_id) === '1' ||
+      String(user.id) === '6602106053'
+    )
   );
 
   return (
